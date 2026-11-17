@@ -24,6 +24,7 @@ constexpr int classes = 10;
 class DenseLayer {
     int in_features;
     int out_features;
+    bool inicial;
     bool final;
     // weights[i][j] liga a entrada j ao neurônio de saída i.
     vector<vector<float>> weights;
@@ -37,8 +38,8 @@ class DenseLayer {
     vector<float> grad_in;
 
 public:
-    DenseLayer(int input_size, int output_size, bool is_final = false)
-        : in_features(input_size), out_features(output_size), final(is_final),
+    DenseLayer(int input_size, int output_size, bool is_inicial = false, bool is_final = false)
+        : in_features(input_size), out_features(output_size), inicial(is_inicial), final(is_final),
           weights(output_size, vector<float>(input_size)), bias(output_size, 0), 
           out(out_features), delta(out_features), grad_in(in_features) {
         // A semente fixa torna a inicialização de cada camada reproduzível.
@@ -76,24 +77,29 @@ public:
         }
 
         // O gradiente da entrada usa os pesos anteriores à atualização.
-        if (in_features != entradas) { // nao calcula pra camada de entrada, o resultado é descartado na main
+        // SGD por amostra. O gradiente do peso é delta vezes a entrada.
+        // O gradiente do viés é o próprio delta.
+        
+        if (!inicial) {
             fill(grad_in.begin(), grad_in.end(), 0.0f);
             for (int i = 0; i < out_features; ++i) {
                 const float d = delta[i];
                 for (int j = 0; j < in_features; ++j) {
                     grad_in[j] += d * weights[i][j];
+                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
                 }
+                bias[i] -= learning_rate * delta[i];
+            }
+        } else { // nao calcula pra camada de entrada, o resultado é descartado na main
+            for (int i = 0; i < out_features; ++i) {
+                const float d = delta[i];
+                for (int j = 0; j < in_features; ++j) {
+                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
+                }
+                bias[i] -= learning_rate * d;
             }
         }
 
-        // SGD por amostra. O gradiente do peso é delta vezes a entrada.
-        // O gradiente do viés é o próprio delta.
-        for (int i = 0; i < out_features; ++i) {
-            for (int j = 0; j < in_features; ++j) {
-                weights[i][j] -= learning_rate * (delta[i] * (*last_input)[j]);
-            }
-            bias[i] -= learning_rate * delta[i];
-        }
         return grad_in;
     }
 };
@@ -271,9 +277,9 @@ int main(int argc, char** argv) {
         constexpr int epocas = 51;
         constexpr float taxa = 0.02f;
         // Rede densa com dimensões 64 -> 32 -> 16 -> 10.
-        Barenn::DenseLayer l1(Barenn::entradas, 32);
+        Barenn::DenseLayer l1(Barenn::entradas, 32, /*inicial=*/true);
         Barenn::DenseLayer l2(32, 16);
-        Barenn::DenseLayer l3(16, Barenn::classes, true);
+        Barenn::DenseLayer l3(16, Barenn::classes, /*inicial=*/false, /*final=*/true);
         vector<float> gradiente(Barenn::classes);
         array<double, epocas> perdas{};
 
