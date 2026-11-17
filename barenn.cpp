@@ -76,12 +76,12 @@ public:
         }
 
         // O gradiente da entrada usa os pesos anteriores à atualização.
-        for (int i = 0; i < in_features; ++i) {
-            float sum = 0;
-            for (int j = 0; j < out_features; ++j) {
-                sum += delta[j] * weights[j][i];
+        fill(grad_in.begin(), grad_in.end(), 0.0f);
+        for (int i = 0; i < out_features; ++i) {
+            const float d = delta[i];
+            for (int j = 0; j < in_features; ++j) {
+                grad_in[j] += d * weights[i][j];
             }
-            grad_in[i] = sum;
         }
 
         // SGD por amostra. O gradiente do peso é delta vezes a entrada.
