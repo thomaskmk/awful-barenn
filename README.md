@@ -165,10 +165,14 @@ Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
 1. **Mini-batch (sequencial).** As amostras de um batch usam os mesmos pesos, com uma única atualização por batch. Como muda o algoritmo, é validado contra o código base por convergência e acurácia.
 2. **OpenMP.** Processa as amostras de cada batch em paralelo. É validado contra a versão sequencial com o mesmo tamanho de batch, com tolerância apertada.
 
+**Configuração fixada.** A mudança de algoritmo exige recalibrar os hiperparâmetros: com a média das correções do batch, batches maiores precisam de taxas maiores. A varredura de B e taxa da #7 fixou **B = 32 e taxa = 0,32** (96,7% de acurácia no teste) para o restante do projeto, incluindo as fases 3 e 4. O mini-batch é a única mudança de algoritmo; as fases seguintes só reorganizam o mesmo cálculo e são validadas contra a `v2.1` com essa configuração.
+
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
-| _—_ | _—_ | Mini-batch | _—_ | _—_ |
-| _—_ | _—_ | OpenMP | _—_ | _—_ |
+| [#7](https://github.com/thomaskmk/awful-barenn/issues/7) | `v2.1` | Mini-batch (B = 32, taxa = 0,32), sequencial | 0,575 s | 1,71× |
+| [#8](https://github.com/thomaskmk/awful-barenn/issues/8) | _—_ | OpenMP (threads e SIMD) | _—_ | _—_ |
+
+Tempo no SD (mediana de 10, 1 thread na #7). Speedup em relação ao código base.
 
 ### 3.3 Migração para GPU
 
