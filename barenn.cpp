@@ -76,11 +76,13 @@ public:
         }
 
         // O gradiente da entrada usa os pesos anteriores à atualização.
-        fill(grad_in.begin(), grad_in.end(), 0.0f);
-        for (int i = 0; i < out_features; ++i) {
-            const float d = delta[i];
-            for (int j = 0; j < in_features; ++j) {
-                grad_in[j] += d * weights[i][j];
+        if (in_features != entradas) { // nao calcula pra camada de entrada, o resultado é descartado na main
+            fill(grad_in.begin(), grad_in.end(), 0.0f);
+            for (int i = 0; i < out_features; ++i) {
+                const float d = delta[i];
+                for (int j = 0; j < in_features; ++j) {
+                    grad_in[j] += d * weights[i][j];
+                }
             }
         }
 

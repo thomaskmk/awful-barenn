@@ -152,7 +152,7 @@ Resolver G1 a G3 sem mudar o algoritmo: o SGD por amostra continua e a saída de
 |---|---|---|---|---|
 | [#1](https://github.com/thomaskmk/awful-barenn/issues/1) | `v1.1` | G3: buffers reaproveitados e passagem por referência | 0,935 s | 1,05× |
 | [#2](https://github.com/thomaskmk/awful-barenn/issues/2) | `v1.2` | G1: laços do `grad_in` invertidos | 0,640 s | 1,53× |
-| [#3](https://github.com/thomaskmk/awful-barenn/issues/3) | _—_ | G2: sem `grad_in` na primeira camada | _—_ | _—_ |
+| [#3](https://github.com/thomaskmk/awful-barenn/issues/3) | `v1.3` | G2: sem `grad_in` na primeira camada | 0,585 s | 1,68× |
 
 Tempo no SD (mediana de 10). Speedup em relação ao código base.
 
@@ -194,7 +194,7 @@ Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base
 | Versão | Tag | Tempo de treino | Speedup | Acurácia |
 |---|---|---|---|---|
 | Código base | `v0-baseline` | 0,981 s | 1,0× | 95,5% |
-| CPU otimizada (sequencial) | _—_ | | | |
+| CPU otimizada (sequencial) | `v1.3` | 0,585 s | 1,68× | 95,5% |
 | CPU paralela (mini-batch) | _—_ | | | |
 | CUDA inicial | _—_ | | | |
 | CUDA otimizada | _—_ | | | |
