@@ -76,24 +76,29 @@ public:
         }
 
         // O gradiente da entrada usa os pesos anteriores à atualização.
+        // SGD por amostra. O gradiente do peso é delta vezes a entrada.
+        // O gradiente do viés é o próprio delta.
+        
         if (in_features != entradas) { // nao calcula pra camada de entrada, o resultado é descartado na main
             fill(grad_in.begin(), grad_in.end(), 0.0f);
             for (int i = 0; i < out_features; ++i) {
                 const float d = delta[i];
                 for (int j = 0; j < in_features; ++j) {
                     grad_in[j] += d * weights[i][j];
+                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
                 }
+                bias[i] -= learning_rate * delta[i];
+            }
+        } else {
+            for (int i = 0; i < out_features; ++i) {
+                const float d = delta[i];
+                for (int j = 0; j < in_features; ++j) {
+                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
+                }
+                bias[i] -= learning_rate * d;
             }
         }
 
-        // SGD por amostra. O gradiente do peso é delta vezes a entrada.
-        // O gradiente do viés é o próprio delta.
-        for (int i = 0; i < out_features; ++i) {
-            for (int j = 0; j < in_features; ++j) {
-                weights[i][j] -= learning_rate * (delta[i] * (*last_input)[j]);
-            }
-            bias[i] -= learning_rate * delta[i];
-        }
         return grad_in;
     }
 };
