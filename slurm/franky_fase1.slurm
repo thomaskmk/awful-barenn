@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=barenn-cpu
-#SBATCH --output=logs/franky_cpu_%j.out
+#SBATCH --job-name=barenn-fase1
+#SBATCH --output=logs/fase1/franky_fase1_%j.out
 #SBATCH --partition=merry_cpu
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=1G
 #SBATCH --time=00:10:00
 
-# Submeta da raiz do repositório: sbatch slurm/franky_cpu.slurm
+# Submeta da raiz do repositório: sbatch slurm/franky_fase1.slurm
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 

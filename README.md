@@ -63,10 +63,12 @@ REF_BIN=./barenn_seq scripts/check.sh ./barenn_omp  # entre duas versões do mes
 
 ```bash
 git checkout <tag>
-sbatch slurm/sd_cpu.slurm      # ou franky_cpu, sd_gpu, franky_gpu (a partir da raiz do repositório)
+sbatch slurm/sd_fase<X>.slurm      # ou franky_fase<X>.slurm (a partir da raiz do repositório)
 ```
 
-Cada job compila, roda uma vez com a saída completa e mais 10 vezes medindo o tempo. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …).
+Há um slurm por ambiente e por fase. Nas tags `v0-baseline` a `v1.3`, os de CPU se chamam `sd_cpu.slurm` e `franky_cpu.slurm`.
+
+Cada job compila e mede o tempo de treino em 10 execuções. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …).
 
 ---
 

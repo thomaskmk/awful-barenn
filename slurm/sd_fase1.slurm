@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=barenn-cpu
-#SBATCH --output=logs/sd_cpu_%j.out
+#SBATCH --job-name=barenn-fase1
+#SBATCH --output=logs/fase1/sd_fase1_%j.out
 #SBATCH --partition=sequana_cpu_dev
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=1G
 #SBATCH --time=00:10:00
 
-# Submeta da raiz do repositório: sbatch slurm/sd_cpu.slurm
+# Submeta da raiz do repositório: sbatch slurm/sd_fase1.slurm
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
