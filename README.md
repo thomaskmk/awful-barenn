@@ -161,6 +161,8 @@ Tempo no SD (mediana de 10). Speedup em relação ao código base.
 
 ### 3.2 Paralelismo em CPU
 
+**Por que mini-batch.** No SGD por amostra (`v1.4`), o treino é uma cadeia de 194.973 passos dependentes de ≈ 2,9 µs: a amostra seguinte precisa dos pesos atualizados pela anterior. Cada passo também é uma cadeia de ≈ 7 fases (forward e backward das três camadas), e o paralelismo disponível fica dentro de uma fase: no máximo 32 × 64 multiplicações-somas, ≈ 0,4 µs. Paralelizar uma fase exige uma sincronização ao final dela, uma barreira do OpenMP na CPU ou um lançamento de kernel na GPU, e esse custo é da mesma ordem de grandeza do trabalho da fase, ou maior. O problema é limitado pela latência da cadeia de dependências, enquanto CPU multinúcleo e GPU ganham com vazão. O único paralelismo sem custo de coordenação é o SIMD, dentro de um núcleo. O mini-batch transforma cada passo de matriz × vetor em matriz × matriz: B amostras independentes para cada sincronização.
+
 Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
 1. **Mini-batch (sequencial).** As amostras de um batch usam os mesmos pesos, com uma única atualização por batch. Como muda o algoritmo, é validado contra o código base por convergência e acurácia.
 2. **OpenMP.** Processa as amostras de cada batch em paralelo. É validado contra a versão sequencial com o mesmo tamanho de batch, com tolerância apertada.
