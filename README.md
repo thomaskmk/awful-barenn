@@ -151,7 +151,7 @@ Resolver G1 a G3 sem mudar o algoritmo: o SGD por amostra continua e a saída de
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
 | [#1](https://github.com/thomaskmk/awful-barenn/issues/1) | `v1.1` | G3: buffers reaproveitados e passagem por referência | 0,935 s | 1,05× |
-| [#2](https://github.com/thomaskmk/awful-barenn/issues/2) | _—_ | G1: laços do `grad_in` invertidos | _—_ | _—_ |
+| [#2](https://github.com/thomaskmk/awful-barenn/issues/2) | `v1.2` | G1: laços do `grad_in` invertidos | 0,640 s | 1,53× |
 | [#3](https://github.com/thomaskmk/awful-barenn/issues/3) | _—_ | G2: sem `grad_in` na primeira camada | _—_ | _—_ |
 
 Tempo no SD (mediana de 10). Speedup em relação ao código base.
