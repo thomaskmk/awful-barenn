@@ -9,9 +9,11 @@
 
 # Submeta da raiz do repositório: sbatch slurm/sd_gpu.slurm
 
+module load gcc/13.2_sequana cuda/12.6_sequana
 nvidia-smi
+nvcc --version | tail -1
 
-nvcc -O3 -arch=native barenn.cu -o barenn_gpu
+nvcc -O3 barenn.cu -o barenn_gpu
 
 ./barenn_gpu
 

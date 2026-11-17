@@ -1,178 +1,205 @@
-# Projeto Barenn: O Legado, a Sobrevivência e o Salto para a GPU
+# Barenn
 
-Era uma segunda-feira aparentemente tranquila quando a demanda chegou à sua mesa. A liderança técnica se aproximou com um sorriso contido e soltou aquela frase clássica que faz qualquer engenheiro gelar por dentro:
+Relatório técnico da APS 2 de Supercomputação (Insper, 2026-2). O enunciado original está em [enunciado.md](enunciado.md).
 
-> "Temos um componente crítico rodando em produção há anos. O desenvolvedor original já saiu da empresa, mas agora o projeto é oficialmente seu."
-    
-Você procurou documentação, manuais ou notas de arquitetura e não encontrou rigorosamente nada. Restou apenas um código hermético a correr em produção.
-
-Depois de analisar o código entendeu que é a implementação de uma Feedforward Neural Network, mas por que razão reinventar a roda? No passado, exigências estritas de conformidade e restrições de licenciamento impediram o recurso a bibliotecas de mercado. Sem alternativa, a empresa optou por criar a sua própria implementação de raiz. O resultado funcionou durante anos, mas tornou-se um labirinto técnico esquecido.
-
-Com o aumento exponencial do volume de dados, a máquina atual começou a falhar nos prazos operacionais. Antes de qualquer migração complexa, **o seu primeiro desafio é estabilizar o código e espremer todo o desempenho possível da CPU — atacando gargalos, repensando o acesso à memória e explorando o paralelismo nativo.**
-
-Para resolver o problema a longo prazo, a empresa adquiriu servidores blade equipados com GPUs corporativas NVIDIA. O hardware de alto desempenho já está montado no datacenter: **a sua missão final é reescrever os pontos críticos do algoritmo em CUDA e levar o processamento ao nível do paralelismo massivo.**
+**Sumário**
+1. [Introdução](#1-introdução)
+2. [Baseline: identificação dos gargalos](#2-baseline-identificação-dos-gargalos)
+3. [Fases do desenvolvimento](#3-fases-do-desenvolvimento)
+4. [Comparação de resultados por fase](#4-comparação-de-resultados-por-fase)
 
 ---
 
-## Diretrizes de Conduta e Governança no Repositório
+## 1. Introdução
 
-Neste projeto, o repositório não é apenas um local de entrega de arquivos, mas a **comprovação do seu processo investigativo de engenharia**. Espera-se uma postura estritamente empírica: nenhuma otimização deve ser feita no escuro e nenhuma melhoria de velocidade tem valor se corromper o resultado final do programa.
+### 1.1 O problema
 
----
+O `barenn.cpp` é uma rede neural *feedforward* escrita do zero, sem bibliotecas, que classifica dígitos manuscritos do conjunto [Optical Recognition of Handwritten Digits](optdigits.names) (UCI): imagens 8×8 com valores de 0 a 16.
 
-### O Princípio do Bloco Lógico de Trabalho
+| Item | Valor |
+|---|---|
+| Arquitetura | 64 → 32 → 16 → 10, ReLU nas camadas ocultas, saída linear |
+| Parâmetros | 2.778 (2.720 pesos + 58 vieses), cerca de 11 KB em `float` |
+| Perda | Metade do erro quadrático, com alvo *one-hot* |
+| Treino | SGD por amostra, 51 épocas, taxa 0,02, ordem do arquivo |
+| Dados | 3.823 imagens de treino (`optdigits.tra`) e 1.797 de teste (`optdigits.tes`) |
+| Métrica de desempenho | `Tempo de treino`: o cronômetro cobre só o laço de treino, sem leitura nem avaliação |
 
-Você tem autonomia para decidir **o que** otimizar e **em qual ordem**, mas cada entrega deve ser estruturada como um **bloco lógico fechado**.
+O objetivo é reduzir o tempo de treino sem corromper o resultado: primeiro otimizando a CPU, depois paralelizando em vários núcleos e, por fim, migrando para CUDA.
 
-> **O que é um bloco lógico?**
-> É uma unidade completa de intervenção técnica que engloba: **um problema identificado por profiling $\rightarrow$ uma hipótese de melhoria $\rightarrow$ a alteração no código $\rightarrow$ a validação da corretude $\rightarrow$ a medição do ganho real.**
+### 1.2 Ambientes
 
-* **Não crie tags por tempo decorrido:** Evite tags como `versao-dia-2` ou commits de "fim de expediente".
-* **Não crie tags para alterações inconclusivas:** Se a alteração piorou o desempenho ou quebrou os testes, documente na Issue, reverta ou ajuste antes de formalizar o marco.
-* **Toda tag deve ser reprodutível:** O professor ou qualquer colega deve conseguir executar `git checkout <tag>`, compilar o código e obter exatamente o mesmo comportamento e ordem de grandeza de desempenho documentados.
+| | Santos Dumont (LNCC) | Franky (Insper) | Desenvolvimento |
+|---|---|---|---|
+| CPU | Intel Xeon Gold 6152 @ 2,10 GHz (Skylake-SP, AVX-512) | _a registrar_ | Apple M5 |
+| Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `merry_cpu`, `merry_gpu` | — |
+| Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | _a registrar_ | Apple clang 21 / gcc 16 |
+| CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) | — |
+| Profilers | valgrind 3.19 (callgrind), perf | _a registrar_ | — |
 
----
+Os resultados oficiais vêm dos clusters. A máquina de desenvolvimento serve só para escrever o código e validar a corretude.
 
-### O Fluxo Esperado no GitHub
+### 1.3 Decisões de compilação
 
-Para cada intervenção técnica planejada, seu ciclo de trabalho no repositório deve seguir três pilares:
+- **gcc 13.2 no Santos Dumont.** O g++ padrão do SD é o gcc 8. Nele, o `std::filesystem` (usado em `main`) só funciona com `-std=c++17` mais o link manual `-lstdc++fs`. O gcc 13.2 foi escolhido  por ser a versão mais nova aceita como compilador de CPU pelo CUDA 12.6, que é o padrão do SD. Assim, o mesmo compilador serve nas fases de CPU e de GPU.
+- **`-std=c++17` explícito.** O Apple clang e o gcc 8 compilam em C++14 por padrão, e o código exige C++17.
+- **Compilação dentro do job.** Cada script em [slurm/](slurm/) compila antes de executar. As flags ficam versionadas junto com cada tag, e o binário é gerado no nó onde vai rodar.
+- **Baseline com `-O3`.** Todo binário, desde a versão base até a versão otimizada em GPU, usa a flag O3.
 
-#### 1. Abertura de Issue (A Hipótese e o Ponto de Partida)
+### 1.4 Validação da corretude
 
-Antes de alterar uma única linha de código, abra uma Issue explicando a intenção do bloco lógico:
+Em `float`, o resultado depende da ordem das operações. Com o mesmo compilador e as mesmas flags, uma mudança que preserva essa ordem produz saída idêntica bit a bit. Uma que a altera (reduções vetorizadas, mini-batch, OpenMP, GPU) produz diferenças pequenas de arredondamento.
 
-* **Diagnóstico:** Qual gargalo você encontrou usando ferramentas de análise (profilers)?
-* **Hipótese:** Qual conceito técnico você pretende aplicar para resolver esse gargalo?
-* **Métrica Base:** Qual é o tempo ou custo de processamento atual dessa rotina?
+O [scripts/check.sh](scripts/check.sh) compila o código base com `-std=c++17 -O3` no mesmo ambiente e compara com o candidato em dois níveis:
+1. **Igualdade exata** da saída, ignorando a linha de tempo. É o critério da fase 1, enquanto a ordem das operações é preservada.
+2. **Tolerância**, quando a ordem muda de propósito: até 2% na perda de cada época de treino, até 5% na perda de teste e até 0,5 ponto percentual de acurácia. A issue correspondente registra por que a igualdade deixou de valer.
 
-#### 2. Desenvolvimento Isolado e Commits Semânticos
-
-* Trabalhe em uma *branch* dedicada àquela hipótese.
-* Faça commits descritivos focados na causa da mudança (ex: `perf: ...`, `refactor: ...`, `fix: ...`).
-* Certifique-se de que a saída do modelo/algoritmo continua correta. Código rápido que calcula resultados errados é considerado código quebrado.
-
-#### 3. Formalização com Tag Anotada e Fechamento da Issue
-
-Quando o bloco estiver concluído e validado, crie uma **Git Tag anotada**:
-
-* A tag marca o estado exato da base de código naquele degrau de maturidade.
-* A mensagem da tag deve resumir sucintamente o resultado alcançado.
-* Feche a Issue anexando as evidências (dados de tempo, prints do profiler ou tabelas comparando o "antes e depois").
-
----
-
-### Exemplo Ilustrativo de um Bloco Lógico
-
-*(Este é apenas um exemplo de como organizar a narrativa técnica e as ferramentas; não representa um passo obrigatório ou a solução do seu problema).*
-
----
-
-#### 1. Cenário: O aluno percebeu lentidão na etapa de processamento sequencial
-
-* **Abertura da Issue #04:**
-> **Título:** *Redução de tempo de computação na rotina de cálculo vetorial*
-> **Contexto:** Ao inspecionar o código com o profiler, identificou-se que 65% do tempo de execução é consumido em um laço interno que realiza operações matemáticas repetitivas.
-> **Métricas atuais:** Tempo total de execução: `14.2s`.
-> **Hipótese:** Reestruturar a ordem dos dados para favorecer o uso de registradores e paralelizar o laço com múltiplos núcleos deve reduzir o tempo dessa rotina.
-
-
-* **Implementação na branch:** `feature/otimizacao-laco-vetorial`
-* Commits atômicos ajustando o laço e aplicando a estratégia escolhida.
-* Verificação de que o resultado final do programa bate com o original.
-
-
-* **Criação da Tag:**
 ```bash
-git tag -a v0.3-laco-paralelo -m "Otimizacao do calculo vetorial: tempo reduzido de 14.2s para 4.8s (Speedup 2.95x). Corretude validada."
-git push origin v0.3-laco-paralelo
-
+scripts/check.sh ./barenn                           # contra o código base (commit 06cee91)
+REF_BIN=./barenn_seq scripts/check.sh ./barenn_omp  # entre duas versões do mesmo algoritmo
 ```
 
+### 1.5 Como reproduzir
 
-* **Fechamento da Issue:**
-* O aluno responde na Issue #04 anexando o comparativo de tempo (antes: `14.2s` / depois: `4.8s`), faz o merge da branch e referencia a tag criada:
+```bash
+git checkout <tag>
+sbatch slurm/sd_cpu.slurm      # ou franky_cpu, sd_gpu, franky_gpu (a partir da raiz do repositório)
+```
 
-
-> *"Otimização implementada e validada na tag `v0.3-laco-paralelo`. Issue fechada pelo PR #05."*
-
-
----
-
-# Rubrica de Avaliação (Total: 10,0 Pontos)
-
-<div style="background:rgba(255, 0, 0, 0.65)"> 
-
-> ### ⚠️ CLÁUSULA ELIMINATÓRIA GERAL (CONDIÇÃO DE NOTA ZERO)
-> 
-> 
-> A avaliação adota uma política estrita de controle de qualidade de engenharia:
-> **Se em QUALQUER um dos critérios ou subcritérios de avaliação for observado o indicativo de `0,0 ponto`, a ATIVIDADE SERÁ INTEGRALMENTE ZERADA (Nota Final = 0,0).**
-> Não é tolerada a ausência completa de qualquer pilar fundamental da atividade (seja por código inoperante/incorreto, falta de governança no Git ou ausência de embasamento empírico nas Issues).
-
-* **Implementação e Desempenho Técnico:** 4,0 pontos
-* **Governança, Reprodutibilidade e Tags:** 2,0 pontos
-* **Relatório Técnico nas Issues (Análise e Discussão):** 4,0 pontos
-
-</div>
+Cada job compila, roda uma vez com a saída completa e mais 10 vezes medindo o tempo. O log fica em `logs/`.
 
 ---
 
-### Critério 1: Implementação e Desempenho Técnico (4,0 pontos)
+## 2. Baseline: identificação dos gargalos
 
-* **0,0 ponto [ZERA A ATIVIDADE]** — O código não compila, aborta durante a execução, não é funcional ou gera saídas matematicamente corrompidas.
-* **+0,5 ponto** — Executou com sucesso o código legado, mediu o baseline de referência de forma reproduzível e identificou os gargalos iniciais.
-* **+1,0 ponto** — Aplicou otimizações eficazes na CPU com ganhos consistentes de velocidade e paralelismo multicore preservando a integridade numérica.
-* **+1,0 ponto** — **Migração Funcional para CUDA:** Porting inicial para GPU completo e correto (kernel funcional, alocação e liberação de memória no Device e transferências Host/Device íntegras).
-* **+0,75 ponto** — Otimizou a execução em GPU.
-* **+0,75 ponto** — Implementou técnicas avançadas em GPU, comprovando ganhos.
+Código base na tag `v0-baseline`, compilado com `g++ -std=c++17 -O3 -g` (gcc 13.2) no Xeon Gold 6152 do SD.
+
+| Métrica | Valor |
+|---|---|
+| Tempo de treino | 0,981 s (mediana de 10 execuções, desvio padrão 0,004 s; [log](logs/sd_cpu_11745815.out)) |
+| Acurácia no teste | 95,5% (1.717 / 1.797) |
+| Perda média no teste | 0,0432 |
+
+### 2.1 Modelo de custo
+
+Por amostra, o treino faz 2.720 multiplicações-somas no forward, 2.720 no `grad_in` (gradiente propagado para a camada anterior) e 2.720 na atualização dos pesos. São **8.160 por amostra** e cerca de **1,59 bilhão no treino** (≈ 3,2 GFLOP). Os pesos ocupam cerca de 11 KB e cabem inteiros no L1 de dados (32 KB por núcleo).
+
+### 2.2 Onde está o custo (callgrind)
+
+Pelo callgrind:
+
+| Trecho | Linhas | % das instruções (total 9,40 × 10⁹) |
+|---|---|---|
+| **Backward: `grad_in`** | [77-82](barenn.cpp#L77-L82) | **47,0%** |
+| Forward: matriz × vetor | [54-61](barenn.cpp#L54-L61) | 23,0% |
+| Backward: atualização dos pesos | [87-91](barenn.cpp#L87-L91) | 14,7% |
+| Alocação e cópia (`malloc`, `free`, `new`, `memcpy`, `memset`) | — | ≈ 5% |
+| `ler_dados` (fora do cronômetro) | [102-140](barenn.cpp#L102-L140) | 4,4% |
+| Perda e avaliação | — | < 1% |
+
+### 2.3 Contadores de hardware (perf stat)
+
+| Contador | Valor |
+|---|---|
+| Instruções | 9,42 × 10⁹ (consistente com o callgrind) |
+| Ciclos | 3,88 × 10⁹ |
+| IPC | 2,43 |
+| Falhas no L1 de dados | 2,2 × 10⁶ |
+| Falhas no último nível de cache | 1,25 × 10⁵ |
+
+**O código não é limitado por memória.** As falhas de cache são irrisórias em valor absoluto, o que é coerente com os pesos cabendo no L1. O IPC de 2,43 é um forte indicativo de que a CPU está ocupada demais, e não ociosa esperando memória.
+
+### 2.4 Roofline
+
+*Essa análise não faz parte do material da disciplina, mas é exigida pela rubrica (critério 3.2: "roofline model").*
+
+O modelo roofline compara o desempenho alcançado com dois tetos do hardware: o de cálculo e o de banda de memória. Qual deles limita o código depende da intensidade aritmética, ou seja, quantos FLOPs são feitos por byte trazido da memória.
+
+- **Teto de cálculo.** Com `-O3`, o compilador gera SSE (vetores de 4 floats) sem FMA. O Skylake executa até duas dessas operações por ciclo[^skylake], o que dá um teto de cerca de 17 GFLOP/s por núcleo (2 × 4 floats × 2,1 GHz).
+- **Intensidade aritmética.** Os pesos ficam no L1 durante todo o treino, então o único dado novo a cada amostra é a imagem: 64 floats (256 bytes) para 16.320 FLOPs, cerca de 64 FLOP/byte. Para alimentar o teto de cálculo bastaria uma banda de 17 / 64 ≈ 0,27 GB/s, muito abaixo da banda de memória do nó.
+
+O baseline está na região limitada por cálculo e atinge cerca de 3,2 GFLOP/s (3,2 GFLOP em 0,981 s), **cerca de 19% do teto**. O que separa o código do teto não é a memória, e sim o excesso de instruções e os laços que não vetorizam.
+
+[^skylake]: Intel 64 and IA-32 Architectures Optimization Reference Manual, seção da microarquitetura Skylake: as portas 0 e 1 executam multiplicação e soma em ponto flutuante.
+
+### 2.5 Gargalos identificados
+
+| # | Gargalo | Evidência | Fase |
+|---|---|---|---|
+| G1 | O `grad_in` percorre `weights[j][i]` por coluna. Cada iteração carrega o ponteiro de uma linha diferente e o laço não vetoriza | 47% das instruções, contra 14,7% da atualização dos pesos, que tem o mesmo número de multiplicações mas percorre a linha e vetoriza (`-fopt-info-vec`) | 1 |
+| G2 | O `grad_in` da primeira camada é calculado e descartado ([linha 289](barenn.cpp#L289)) | 2.048 das 2.720 multiplicações-somas do `grad_in`: cerca de 35% de todas as instruções, estimado pela proporção | 1 |
+| G3 | Vetores passados e devolvidos por valor, recriados a cada chamada | 2,95 × 10⁶ chamadas a `malloc` (≈ 15 por amostra), ≈ 5% das instruções | 1 |
+
+**Limite ao paralelismo.** O SGD por amostra é sequencial: cada amostra usa os pesos atualizados pela anterior, e cada uma tem cerca de 5 µs de trabalho (0,981 s ÷ 194.973 passos de treino), pouco demais para dividir entre threads. Paralelizar exige mudar o algoritmo para mini-batch (seção 3.2).
+
+**Descartados**
+- **Pré-alocar vetores na leitura dos dados:** afetaria no máximo os 4,4% de `ler_dados`, dominados pela conversão de texto em `float`, e fora do cronômetro.
+- **Paralelizar o cálculo da perda:** 10 operações por amostra (< 0,2%), custaria mais em sincronização do que economizaria.
+- **Matriz de pesos contígua no lugar de `vector<vector<float>>`:** sem ganho mensurável, nem sozinha nem após corrigir G1. Os laços que percorrem a linha carregam o ponteiro uma vez por linha, e a matriz inteira cabe no L1.
 
 ---
 
-### Critério 2: Governança, Reprodutibilidade e Tags (2,0 pontos)
+## 3. Fases do desenvolvimento
 
-* **0,0 ponto [ZERA A ATIVIDADE]** — Ausência de tags, ou repositório com commit único ("tudo pronto") / commits lineares sem separação lógica, inviabilizando a reprodutibilidade dos marcos intermediários.
-* **+0,5 ponto** — Utilizou tags, mas elas marcam datas/horários arbitrários em vez de blocos lógicos fechados de trabalho, ou as tags não compilam de forma independente.
-* **+1,2 ponto** — Trabalho estruturado em **blocos lógicos**: cada intervenção possui uma Git Tag anotada associada a uma Issue, permitindo compilar e checar a métrica de cada versão via `git checkout <tag>`.
-* **+2,0 pontos** — Reprodutibilidade e histórico impecáveis: commits atômicos com mensagens semânticas (`perf:`, `refactor:`, `test:`), branches limpas integradas via Pull Requests documentados e rastreabilidade total de cada degrau de performance.
+Cada intervenção é um bloco lógico: uma issue com diagnóstico, hipótese e métrica base, uma branch, um PR e uma tag anotada. A análise da seção 2 serve de ponto de partida para as issues da fase 1.
+
+### 3.1 Otimização básica (CPU, sequencial)
+
+Resolver G1 a G3 sem mudar o algoritmo: o SGD por amostra continua e a saída deve ser idêntica à do código base no `check.sh`.
+
+| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+|---|---|---|---|---|
+| _—_ | _—_ | _—_ | _—_ | _—_ |
+
+### 3.2 Paralelismo em CPU
+
+Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
+1. **Mini-batch (sequencial).** As amostras de um batch usam os mesmos pesos, com uma única atualização por batch. Como muda o algoritmo, é validado contra o código base por convergência e acurácia.
+2. **OpenMP.** Processa as amostras de cada batch em paralelo. É validado contra a versão sequencial com o mesmo tamanho de batch, com tolerância apertada.
+
+| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+|---|---|---|---|---|
+| _—_ | _—_ | Mini-batch | _—_ | _—_ |
+| _—_ | _—_ | OpenMP | _—_ | _—_ |
+
+### 3.3 Migração para GPU
+
+Porte para CUDA da versão com mini-batch: kernels de forward e backward, alocação e cópias entre CPU e GPU.
+
+| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+|---|---|---|---|---|
+| _—_ | _—_ | _—_ | _—_ | _—_ |
+
+### 3.4 Otimização em GPU
+
+Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, streams), guiadas por Nsight Systems e Nsight Compute.
+
+| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+|---|---|---|---|---|
+| _—_ | _—_ | _—_ | _—_ | _—_ |
 
 ---
 
-### Critério 3: Relatório Técnico nas Issues (Análise e Discussão) (4,0 pontos)
+## 4. Comparação de resultados por fase
 
-#### 3.1 Profiling e Evidências Empíricas (1,5 ponto)
+Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base no mesmo cluster.
 
-* **0,0 ponto [ZERA A ATIVIDADE]** — Não apresenta dados de medição nas Issues ou baseia-se unicamente em impressões subjetivas sem qualquer dado empírico.
-* **+0,5 ponto** — Apresenta apenas tempos brutos de relógio (*wall-clock*) colados em texto corrido, sem dados de profilers ou repetições estatísticas.
-* **+1,0 ponto** — Apresenta dados e capturas das ferramentas oficiais (**perf/callgrind** e **Nsight Systems/Compute**), mas faltam informações cruciais de ambiente (flags, parâmetros de teste ou hardware).
-* **+1,5 ponto** — Issues contêm relatórios completos de profiling (CPU e GPU), métricas de hardware detalhadas (tempo de kernel vs transferência PCIe, cache misses, ocupação teórica vs real de SMs) e metodologia experimental rigorosa.
+### Santos Dumont
 
-#### 3.2 Qualidade da Discussão Técnica e Argumentação de Engenharia (2,5 pontos)
+| Versão | Tag | Tempo de treino | Speedup | Acurácia |
+|---|---|---|---|---|
+| Código base | `v0-baseline` | 0,981 s | 1,0× | 95,5% |
+| CPU otimizada (sequencial) | _—_ | | | |
+| CPU paralela (mini-batch) | _—_ | | | |
+| CUDA inicial | _—_ | | | |
+| CUDA otimizada | _—_ | | | |
 
-* **0,0 ponto [ZERA A ATIVIDADE]** — Discussão inexistente, Issues fechadas apenas com "ok/concluído" ou explicações inconsistentes/conflitantes com os dados coletados.
-* **+1,0 ponto** — Discussão puramente descritiva (lista o que foi alterado nas linhas de código, mas não analisa *por que* houve ou não ganho com base em hardware).
-* **+1,8 ponto** — Discute tecnicamente a relação entre o código e o comportamento de hardware (ex: impacto do layout de memória nos caches da CPU, balanceamento de carga entre threads).
-* **+2,5 pontos** — Análise técnica aprofundada: correlaciona os resultados com conceitos avançados de arquitetura (roofline model, limites da Lei de Amdahl, latência do PCIe vs throughput do kernel CUDA) e debate criticamente as decisões de engenharia tomadas.
+### Franky
 
----
-
-## Tabela de Cenários e Balizadores
-
-| Cenário | Situação Técnica no GitHub | Resultado / Nota |
-| --- | --- | --- |
-| **Desclassificado** | Tirou `0,0` em qualquer critério (ex: código não compila, sem tags, sem dados de profiling nas issues ou issues vazias). | **0,0 (Zerada)** |
-| **Abaixo do Esperado** | Código compila e funciona, mas há otimizações superficiais, profiling fraco e tags incompletas. | **0,1 a 5,9** |
-| **Linha de Base (Alvo: 6,0)** | CPU razoavelmente otimizada + **Migração simples para CUDA funcional** + Issues estruturadas com diagnóstico e tags atreladas. | **6,0 a 6,5** |
-| **Avançado / Destaque** | CPU altamente eficiente + **CUDA com otimizações avançadas (Shared Memory/Streams)** + discussões ricas nas Issues com Nsight/Perf + governança impecável. | **8,5 a 10,0** |
-
----
-
-## Formato de Entrega
-
-A entrega consiste exclusivamente no **link do repositório no GitHub**.
-
-1. O `README.md` principal deve atuar como o **sumário executivo do relatório**, sendo adiciocionado **NO TOPO DO README**:
-* A tabela consolidada final comparando todas as versões (Baseline Legado, CPU Otimizada, CUDA Inicial, CUDA Otimizado);
-* Um **índice navegável com links diretos** para cada uma das Issues/Tags que contêm a discussão detalhada;
-
-2. Todas as branches de trabalho devem estar integradas à `main`;
-3. Todas as Issues de experimentos devem estar fechadas e associadas à sua respectiva Git Tag anotada.
+| Versão | Tag | Tempo de treino | Speedup | Acurácia |
+|---|---|---|---|---|
+| Código base | `v0-baseline` | | 1,0× | |
+| CPU otimizada (sequencial) | _—_ | | | |
+| CPU paralela (mini-batch) | _—_ | | | |
+| CUDA inicial | _—_ | | | |
+| CUDA otimizada | _—_ | | | |

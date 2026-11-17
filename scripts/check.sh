@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checagem de corretude do barenn.
 #
-# Compara a saída de um binário candidato com a do código legado, compilado
+# Compara a saída de um binário candidato com a do código base, compilado
 # neste mesmo ambiente a partir de um commit de referência. Primeiro tenta a
 # igualdade exata (ignorando o tempo). Se não houver, compara por tolerância:
 # soma em outra ordem, FMA, vetorização e GPU mudam o arredondamento em float,
@@ -11,7 +11,7 @@
 #   scripts/check.sh <binario> [arquivo_treino arquivo_teste]
 #
 # Variáveis de ambiente (todas opcionais):
-#   REF          commit/tag com o código de referência  (padrão: 06cee91, o legado)
+#   REF          commit/tag com o código de referência  (padrão: 06cee91, o código base)
 #   REF_BIN      binário de referência já compilado; pula a compilação de REF
 #   REF_CXX      compilador da referência              (padrão: g++)
 #   REF_FLAGS    flags da referência                   (padrão: -std=c++17 -O3)

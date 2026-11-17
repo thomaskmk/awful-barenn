@@ -12,7 +12,7 @@
 module load cuda/12.8.1
 nvidia-smi
 
-nvcc -O3 -arch=native barenn.cu -o barenn_gpu
+nvcc -O3 barenn.cu -o barenn_gpu
 
 ./barenn_gpu
 
