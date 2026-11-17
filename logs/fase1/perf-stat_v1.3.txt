@@ -1,0 +1,17 @@
+# started on Tue Nov 17 17:44:37 2026
+
+
+ Performance counter stats for 'bin/barenn_profiling':
+
+     2,341,589,100      cycles                                                      
+     4,852,728,999      instructions              #    2.07  insn per cycle         
+       904,723,306      L1-dcache-loads                                             
+         1,469,778      L1-dcache-load-misses     #    0.16% of all L1-dcache accesses
+           475,131      cache-misses                                                
+
+       0.889707059 seconds time elapsed
+
+       0.884089000 seconds user
+       0.001986000 seconds sys
+
+
