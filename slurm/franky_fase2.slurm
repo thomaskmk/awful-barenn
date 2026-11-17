@@ -9,31 +9,47 @@
 
 # Submeta da raiz do repositório: sbatch slurm/franky_fase2.slurm
 
-BATCHES="1 8 16 32 64 128"                       # varredura de B (#7)
-B_OMP=32                                         # B fixo no teste de escalabilidade (#8)
-THREADS="1 2 4 8 $SLURM_CPUS_PER_TASK"           # varredura de threads (#8)
+BATCHES="1 8 16 32 64 128"                               # varredura de B (#7)
+TAXAS="0.02 0.08 0.16 0.32 0.64 1.28"                    # varredura de taxa para cada B (#7)
+PARES="1:0.02 8:0.16 16:0.32 32:0.64 64:1.28 128:1.28"   # pares B:taxa medidos em tempo (#7)
+B_OMP=32                                                 # par fixo do teste de escalabilidade (#8)
+TAXA_OMP=0.32
+THREADS="1 2 4 8 $SLURM_CPUS_PER_TASK"   # varredura de threads (#8)
+
+# Binário próprio do job: recompilar barenn.cpp durante o job não o afeta.
+BIN=./barenn_$SLURM_JOB_ID
 
 export OMP_PROC_BIND=close OMP_PLACES=cores
-
 g++ --version | head -1
 lscpu | grep -E 'Model name|^Socket|Core\(s\) per socket|Thread\(s\) per core'
-g++ -std=c++17 -O3 -fopenmp barenn.cpp -o barenn
+g++ -std=c++17 -O3 -fopenmp barenn.cpp -o $BIN
 
-echo "== Mini-batch: varredura de B (1 thread)"
+echo "== Mini-batch: acurácia por B e taxa (1 thread)"
 export OMP_NUM_THREADS=1
 for B in $BATCHES; do
-    echo "-- B=$B"
-    BATCH_SIZE=$B ./barenn | grep -E 'Epoca 51|Acuracia|Perda media'
-    for i in {1..10}; do
-        BATCH_SIZE=$B ./barenn | grep Tempo
+    for TX in $TAXAS; do
+        echo "B=$B taxa=$TX | $(BATCH_SIZE=$B TAXA=$TX $BIN | grep Acuracia)"
     done
 done
 
-echo "== OpenMP: escalabilidade (B=$B_OMP)"
-for T in $THREADS; do
-    echo "-- threads=$T"
-    OMP_NUM_THREADS=$T BATCH_SIZE=$B_OMP ./barenn | grep -E 'Acuracia|Perda media'
+echo "== Mini-batch: tempo por B (1 thread)"
+for P in $PARES; do
+    B=${P%:*}
+    TX=${P#*:}
+    echo "-- B=$B taxa=$TX"
+    BATCH_SIZE=$B TAXA=$TX $BIN | grep -E 'Epoca 51|Acuracia|Perda media'
     for i in {1..10}; do
-        OMP_NUM_THREADS=$T BATCH_SIZE=$B_OMP ./barenn | grep Tempo
+        BATCH_SIZE=$B TAXA=$TX $BIN | grep Tempo
     done
 done
+
+echo "== OpenMP: escalabilidade (B=$B_OMP, taxa=$TAXA_OMP)"
+for T in $THREADS; do
+    echo "-- threads=$T"
+    OMP_NUM_THREADS=$T BATCH_SIZE=$B_OMP TAXA=$TAXA_OMP $BIN | grep -E 'Acuracia|Perda media'
+    for i in {1..10}; do
+        OMP_NUM_THREADS=$T BATCH_SIZE=$B_OMP TAXA=$TAXA_OMP $BIN | grep Tempo
+    done
+done
+
+rm -f $BIN

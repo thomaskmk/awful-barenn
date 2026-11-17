@@ -297,14 +297,25 @@ int main(int argc, char** argv) {
         int batch_size = 1;
         if (const char* valor = getenv("BATCH_SIZE")) {
             size_t lidos = 0;
-            batch_size = stoi(valor, &lidos);
-            if (lidos != string(valor).size() || batch_size < 1) {
+            try { batch_size = stoi(valor, &lidos); } catch (const logic_error&) { lidos = 0; }
+            if (lidos == 0 || lidos != string(valor).size() || batch_size < 1) {
                 throw runtime_error("BATCH_SIZE deve ser um inteiro >= 1");
             }
         }
 
+        // Taxa de aprendizado pela variável de ambiente TAXA.
+        // Sem a variável, 0,02 (a do código base). Com a média das correções
+        // do batch, batches maiores precisam de taxas maiores.
+        float taxa = 0.02f;
+        if (const char* valor = getenv("TAXA")) {
+            size_t lidos = 0;
+            try { taxa = stof(valor, &lidos); } catch (const logic_error&) { lidos = 0; }
+            if (lidos == 0 || lidos != string(valor).size() || !(taxa > 0.0f)) {
+                throw runtime_error("TAXA deve ser um número > 0");
+            }
+        }
+
         constexpr int epocas = 51;
-        constexpr float taxa = 0.02f;
         // Rede densa com dimensões 64 -> 32 -> 16 -> 10.
         Barenn::DenseLayer l1(Barenn::entradas, 32, /*inicial=*/true);
         Barenn::DenseLayer l2(32, 16);
