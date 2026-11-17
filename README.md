@@ -66,7 +66,7 @@ git checkout <tag>
 sbatch slurm/sd_cpu.slurm      # ou franky_cpu, sd_gpu, franky_gpu (a partir da raiz do repositório)
 ```
 
-Cada job compila, roda uma vez com a saída completa e mais 10 vezes medindo o tempo. O log fica em `logs/`.
+Cada job compila, roda uma vez com a saída completa e mais 10 vezes medindo o tempo. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …).
 
 ---
 
@@ -76,7 +76,7 @@ Código base na tag `v0-baseline`, compilado com `g++ -std=c++17 -O3 -g` (gcc 13
 
 | Métrica | Valor |
 |---|---|
-| Tempo de treino | 0,981 s (mediana de 10 execuções, desvio padrão 0,004 s; [log](logs/sd_cpu_11745815.out)) |
+| Tempo de treino | 0,981 s (mediana de 10 execuções, desvio padrão 0,004 s; [log](logs/base/sd_base)) |
 | Acurácia no teste | 95,5% (1.717 / 1.797) |
 | Perda média no teste | 0,0432 |
 
@@ -101,13 +101,14 @@ Pelo callgrind:
 
 | Contador | Valor |
 |---|---|
-| Instruções | 9,42 × 10⁹ (consistente com o callgrind) |
-| Ciclos | 3,88 × 10⁹ |
-| IPC | 2,43 |
-| Falhas no L1 de dados | 2,2 × 10⁶ |
-| Falhas no último nível de cache | 1,25 × 10⁵ |
+| Instruções | 9,41 × 10⁹ (consistente com o callgrind) |
+| Ciclos | 3,80 × 10⁹ |
+| IPC | 2,48 |
+| Leituras no L1 de dados | 2,54 × 10⁹ |
+| Falhas no L1 de dados | 2,03 × 10⁶ (0,08% das leituras) |
+| Falhas no último nível de cache | 7,7 × 10⁵ |
 
-**O código não é limitado por memória.** As falhas de cache são irrisórias em valor absoluto, o que é coerente com os pesos cabendo no L1. O IPC de 2,43 é um forte indicativo de que a CPU está ocupada demais, e não ociosa esperando memória.
+**O código não é limitado por memória.** As falhas de cache são irrisórias em valor absoluto, o que é coerente com os pesos cabendo no L1. O IPC de 2,48 é um forte indicativo de que a CPU está ocupada demais, e não ociosa esperando memória.
 
 ### 2.4 Roofline
 
@@ -149,7 +150,11 @@ Resolver G1 a G3 sem mudar o algoritmo: o SGD por amostra continua e a saída de
 
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
-| _—_ | _—_ | _—_ | _—_ | _—_ |
+| [#1](https://github.com/thomaskmk/awful-barenn/issues/1) | `v1.1` | G3: buffers reaproveitados e passagem por referência | 0,935 s | 1,05× |
+| [#2](https://github.com/thomaskmk/awful-barenn/issues/2) | _—_ | G1: laços do `grad_in` invertidos | _—_ | _—_ |
+| [#3](https://github.com/thomaskmk/awful-barenn/issues/3) | _—_ | G2: sem `grad_in` na primeira camada | _—_ | _—_ |
+
+Tempo no SD (mediana de 10). Speedup em relação ao código base.
 
 ### 3.2 Paralelismo em CPU
 
