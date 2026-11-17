@@ -36,12 +36,15 @@ class DenseLayer {
     vector<float> out;
     vector<float> delta;
     vector<float> grad_in;
+    vector<vector<float>> grad_w; // acumuladores do mini batch GD
+    vector<float> grad_b;
 
 public:
     DenseLayer(int input_size, int output_size, bool is_inicial = false, bool is_final = false)
         : in_features(input_size), out_features(output_size), inicial(is_inicial), final(is_final),
           weights(output_size, vector<float>(input_size)), bias(output_size, 0), 
-          out(out_features), delta(out_features), grad_in(in_features) {
+          out(out_features), delta(out_features), grad_in(in_features),
+          grad_w(output_size, vector<float>(input_size)), grad_b(output_size, 0) {
         // A semente fixa torna a inicialização de cada camada reproduzível.
         mt19937 gen(1337);
         uniform_real_distribution<float> distribution(-0.05f, 0.05f);
@@ -86,21 +89,36 @@ public:
                 const float d = delta[i];
                 for (int j = 0; j < in_features; ++j) {
                     grad_in[j] += d * weights[i][j];
-                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
+                    grad_w[i][j] -= learning_rate * (d * (*last_input)[j]);
                 }
-                bias[i] -= learning_rate * delta[i];
+                grad_b[i] -= learning_rate * delta[i];
             }
         } else { // nao calcula pra camada de entrada, o resultado é descartado na main
             for (int i = 0; i < out_features; ++i) {
                 const float d = delta[i];
                 for (int j = 0; j < in_features; ++j) {
-                    weights[i][j] -= learning_rate * (d * (*last_input)[j]);
+                    grad_w[i][j] -= learning_rate * (d * (*last_input)[j]);
                 }
-                bias[i] -= learning_rate * d;
+                grad_b[i] -= learning_rate * d;
             }
         }
 
         return grad_in;
+    }
+
+    // Aplica as correções acumuladas no batch e zera os acumuladores.
+    // n é o número de amostras do batch (o último batch pode ser menor).
+    // a perda de um batch é a média das perdas das amostras
+    void Atualizar(size_t n) {
+        const float inv = 1.0f / n;
+        for (int i = 0; i < out_features; ++i) {
+            for (int j = 0; j < in_features; ++j) {
+                weights[i][j] += grad_w[i][j] * inv;
+                grad_w[i][j] = 0.0f;
+            }
+            bias[i] += grad_b[i] * inv;
+            grad_b[i] = 0.0f;
+        }
     }
 };
 
@@ -274,8 +292,30 @@ int main(int argc, char** argv) {
             throw runtime_error("Use arquivos distintos para treino e teste.");
         }
 
+        // Tamanho do batch pela variável de ambiente BATCH_SIZE.
+        // Sem a variável, B = 1 (SGD por amostra, igual ao código base).
+        int batch_size = 1;
+        if (const char* valor = getenv("BATCH_SIZE")) {
+            size_t lidos = 0;
+            try { batch_size = stoi(valor, &lidos); } catch (const logic_error&) { lidos = 0; }
+            if (lidos == 0 || lidos != string(valor).size() || batch_size < 1) {
+                throw runtime_error("BATCH_SIZE deve ser um inteiro >= 1");
+            }
+        }
+
+        // Taxa de aprendizado pela variável de ambiente TAXA.
+        // Sem a variável, 0,02 (a do código base). Com a média das correções
+        // do batch, batches maiores precisam de taxas maiores.
+        float taxa = 0.02f;
+        if (const char* valor = getenv("TAXA")) {
+            size_t lidos = 0;
+            try { taxa = stof(valor, &lidos); } catch (const logic_error&) { lidos = 0; }
+            if (lidos == 0 || lidos != string(valor).size() || !(taxa > 0.0f)) {
+                throw runtime_error("TAXA deve ser um número > 0");
+            }
+        }
+
         constexpr int epocas = 51;
-        constexpr float taxa = 0.02f;
         // Rede densa com dimensões 64 -> 32 -> 16 -> 10.
         Barenn::DenseLayer l1(Barenn::entradas, 32, /*inicial=*/true);
         Barenn::DenseLayer l2(32, 16);
@@ -288,18 +328,31 @@ int main(int argc, char** argv) {
         for (int epoca = 0; epoca < epocas; ++epoca) {
             double perda_total = 0;
             // Uma época percorre todo o conjunto na ordem do arquivo.
-            for (const auto& amostra : treino) {
-                const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem)));
-                perda_total += Barenn::perda(escores, amostra.rotulo, &gradiente);
+            for (size_t inicio_batch = 0; inicio_batch < treino.size(); inicio_batch += batch_size) {
+                // O último batch pode ser menor que batch_size.
+                size_t fim_batch = min(inicio_batch + batch_size, treino.size());
 
-                // Propaga o gradiente da última camada até a primeira.
-                // Cada Backward também atualiza os parâmetros da sua camada.
-                const auto& grad3 = l3.Backward(gradiente, taxa);
-                const auto& grad2 = l2.Backward(grad3, taxa);
-                l1.Backward(grad2, taxa);
+                for (size_t s = inicio_batch; s < fim_batch; ++s) {
+                    const auto& amostra = treino[s];
+                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem)));
+                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradiente);
+                    
+                    // Propaga o gradiente da última camada até a primeira.
+                    // Cada Backward acumula as correções da sua camada, sem alterar os pesos.
+                    const auto& grad3 = l3.Backward(gradiente, taxa);
+                    const auto& grad2 = l2.Backward(grad3, taxa);
+                    l1.Backward(grad2, taxa);
+                }
+
+                // Uma atualização por batch, com a média das correções.
+                const size_t n = fim_batch - inicio_batch;
+                l1.Atualizar(n);
+                l2.Atualizar(n);
+                l3.Atualizar(n);
             }
             perdas[epoca] = perda_total / treino.size();
         }
+
         const chrono::duration<double> tempo = chrono::steady_clock::now() - inicio;
 
         // Imprime as métricas e roda a avaliação após encerrar o cronômetro.
