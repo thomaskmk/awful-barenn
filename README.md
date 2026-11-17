@@ -29,20 +29,20 @@ O objetivo é reduzir o tempo de treino sem corromper o resultado: primeiro otim
 
 ### 1.2 Ambientes
 
-| | Santos Dumont (LNCC) | Franky (Insper) | Desenvolvimento |
-|---|---|---|---|
-| CPU | Intel Xeon Gold 6152 @ 2,10 GHz (Skylake-SP, AVX-512) | _a registrar_ | Apple M5 |
-| Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `merry_cpu`, `merry_gpu` | — |
-| Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | _a registrar_ | Apple clang 21 / gcc 16 |
-| CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) | — |
-| Profilers | valgrind 3.19 (callgrind), perf | _a registrar_ | — |
+| | Santos Dumont (LNCC) | Franky (Insper) |
+|---|---|---|
+| CPU | Intel Xeon Gold 6152 @ 2,10 GHz (Skylake-SP, AVX-512) | _a registrar_ |
+| Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `merry_cpu`, `merry_gpu` |
+| Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | _a registrar_ |
+| CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) |
+| Profilers | valgrind 3.19 (callgrind), perf | _a registrar_ |
 
-Os resultados oficiais vêm dos clusters. A máquina de desenvolvimento serve só para escrever o código e validar a corretude.
+Todas as medições e evidências deste relatório vêm desses dois clusters.
 
 ### 1.3 Decisões de compilação
 
 - **gcc 13.2 no Santos Dumont.** O g++ padrão do SD é o gcc 8. Nele, o `std::filesystem` (usado em `main`) só funciona com `-std=c++17` mais o link manual `-lstdc++fs`. O gcc 13.2 foi escolhido  por ser a versão mais nova aceita como compilador de CPU pelo CUDA 12.6, que é o padrão do SD. Assim, o mesmo compilador serve nas fases de CPU e de GPU.
-- **`-std=c++17` explícito.** O Apple clang e o gcc 8 compilam em C++14 por padrão, e o código exige C++17.
+- **`-std=c++17` explícito.** O gcc 8 compila em C++14 por padrão, e o código exige C++17.
 - **Compilação dentro do job.** Cada script em [slurm/](slurm/) compila antes de executar. As flags ficam versionadas junto com cada tag, e o binário é gerado no nó onde vai rodar.
 - **Baseline com `-O3`.** Todo binário, desde a versão base até a versão otimizada em GPU, usa a flag O3.
 
@@ -135,7 +135,7 @@ O baseline está na região limitada por cálculo e atinge cerca de 3,2 GFLOP/s 
 **Descartados**
 - **Pré-alocar vetores na leitura dos dados:** afetaria no máximo os 4,4% de `ler_dados`, dominados pela conversão de texto em `float`, e fora do cronômetro.
 - **Paralelizar o cálculo da perda:** 10 operações por amostra (< 0,2%), custaria mais em sincronização do que economizaria.
-- **Matriz de pesos contígua no lugar de `vector<vector<float>>`:** sem ganho mensurável, nem sozinha nem após corrigir G1. Os laços que percorrem a linha carregam o ponteiro uma vez por linha, e a matriz inteira cabe no L1.
+- **Matriz de pesos contígua no lugar de `vector<vector<float>>`:** _medição no SD pendente_. Os laços que percorrem a linha carregam o ponteiro uma vez por linha, e a matriz inteira cabe no L1.
 
 ---
 
