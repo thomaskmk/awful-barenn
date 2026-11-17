@@ -1,0 +1,3 @@
+Referência: 06cee91 (g++ -std=c++17 -O3)
+Candidato:  /scratch/insperhpc/thomas.kassabian/aps2/bin/barenn_check
+OK: saída idêntica à referência (exceto o tempo).
