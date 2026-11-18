@@ -1,0 +1,219 @@
+g++ (GCC) 13.2.0
+Thread(s) per core:  1
+Core(s) per socket:  24
+Socket(s):           2
+Model name:          Intel(R) Xeon(R) Gold 6252 CPU @ 2.10GHz
+== Mini-batch: acurácia por B e taxa (1 thread)
+B=1 taxa=0.02 | Acuracia 95.4% | 1715 acertos em 1797 imagens
+B=1 taxa=0.08 | Acuracia 95.4% | 1714 acertos em 1797 imagens
+B=1 taxa=0.16 | Acuracia 57.9% | 1040 acertos em 1797 imagens
+B=1 taxa=0.32 | Acuracia 10.1% | 181 acertos em 1797 imagens
+B=1 taxa=0.64 | Acuracia 10.0% | 179 acertos em 1797 imagens
+B=1 taxa=1.28 | Acuracia 10.0% | 179 acertos em 1797 imagens
+B=8 taxa=0.02 | Acuracia 95.4% | 1714 acertos em 1797 imagens
+B=8 taxa=0.08 | Acuracia 96.1% | 1727 acertos em 1797 imagens
+B=8 taxa=0.16 | Acuracia 96.5% | 1735 acertos em 1797 imagens
+B=8 taxa=0.32 | Acuracia 96.5% | 1734 acertos em 1797 imagens
+B=8 taxa=0.64 | Acuracia 95.3% | 1712 acertos em 1797 imagens
+B=8 taxa=1.28 | Acuracia 10.1% | 181 acertos em 1797 imagens
+B=16 taxa=0.02 | Acuracia 93.8% | 1685 acertos em 1797 imagens
+B=16 taxa=0.08 | Acuracia 96.2% | 1729 acertos em 1797 imagens
+B=16 taxa=0.16 | Acuracia 95.9% | 1724 acertos em 1797 imagens
+B=16 taxa=0.32 | Acuracia 96.5% | 1734 acertos em 1797 imagens
+B=16 taxa=0.64 | Acuracia 96.3% | 1730 acertos em 1797 imagens
+B=16 taxa=1.28 | Acuracia 10.0% | 180 acertos em 1797 imagens
+B=32 taxa=0.02 | Acuracia 83.5% | 1500 acertos em 1797 imagens
+B=32 taxa=0.08 | Acuracia 95.3% | 1712 acertos em 1797 imagens
+B=32 taxa=0.16 | Acuracia 95.9% | 1724 acertos em 1797 imagens
+B=32 taxa=0.32 | Acuracia 96.7% | 1737 acertos em 1797 imagens
+B=32 taxa=0.64 | Acuracia 95.9% | 1724 acertos em 1797 imagens
+B=32 taxa=1.28 | Acuracia 38.8% | 697 acertos em 1797 imagens
+B=64 taxa=0.02 | Acuracia 58.5% | 1052 acertos em 1797 imagens
+B=64 taxa=0.08 | Acuracia 93.5% | 1681 acertos em 1797 imagens
+B=64 taxa=0.16 | Acuracia 95.5% | 1716 acertos em 1797 imagens
+B=64 taxa=0.32 | Acuracia 96.1% | 1727 acertos em 1797 imagens
+B=64 taxa=0.64 | Acuracia 95.8% | 1721 acertos em 1797 imagens
+B=64 taxa=1.28 | Acuracia 95.7% | 1720 acertos em 1797 imagens
+B=128 taxa=0.02 | Acuracia 28.7% | 516 acertos em 1797 imagens
+B=128 taxa=0.08 | Acuracia 83.3% | 1497 acertos em 1797 imagens
+B=128 taxa=0.16 | Acuracia 93.3% | 1677 acertos em 1797 imagens
+B=128 taxa=0.32 | Acuracia 95.6% | 1718 acertos em 1797 imagens
+B=128 taxa=0.64 | Acuracia 96.0% | 1726 acertos em 1797 imagens
+B=128 taxa=1.28 | Acuracia 95.5% | 1717 acertos em 1797 imagens
+== Mini-batch: tempo por B (1 thread)
+-- B=1 taxa=0.02
+Epoca 51/51 | perda media 0.0134
+Acuracia 95.4% | 1715 acertos em 1797 imagens
+Perda media 0.0444
+Tempo de treino 1.5197 s
+Tempo de treino 1.5216 s
+Tempo de treino 1.5239 s
+Tempo de treino 1.5199 s
+Tempo de treino 1.5184 s
+Tempo de treino 1.5163 s
+Tempo de treino 1.5163 s
+Tempo de treino 1.5194 s
+Tempo de treino 1.5192 s
+Tempo de treino 1.5185 s
+-- B=8 taxa=0.16
+Epoca 51/51 | perda media 0.0115
+Acuracia 96.5% | 1735 acertos em 1797 imagens
+Perda media 0.0363
+Tempo de treino 0.7723 s
+Tempo de treino 0.7712 s
+Tempo de treino 0.7727 s
+Tempo de treino 0.7722 s
+Tempo de treino 0.7719 s
+Tempo de treino 0.7718 s
+Tempo de treino 0.7745 s
+Tempo de treino 0.7725 s
+Tempo de treino 0.7717 s
+Tempo de treino 0.7695 s
+-- B=16 taxa=0.32
+Epoca 51/51 | perda media 0.0108
+Acuracia 96.5% | 1734 acertos em 1797 imagens
+Perda media 0.0355
+Tempo de treino 0.7154 s
+Tempo de treino 0.7163 s
+Tempo de treino 0.7178 s
+Tempo de treino 0.7156 s
+Tempo de treino 0.7142 s
+Tempo de treino 0.7170 s
+Tempo de treino 0.7171 s
+Tempo de treino 0.7153 s
+Tempo de treino 0.7206 s
+Tempo de treino 0.7191 s
+-- B=32 taxa=0.64
+Epoca 51/51 | perda media 0.0120
+Acuracia 95.9% | 1724 acertos em 1797 imagens
+Perda media 0.0475
+Tempo de treino 0.6777 s
+Tempo de treino 0.6778 s
+Tempo de treino 0.6769 s
+Tempo de treino 0.6774 s
+Tempo de treino 0.6780 s
+Tempo de treino 0.6773 s
+Tempo de treino 0.6768 s
+Tempo de treino 0.6781 s
+Tempo de treino 0.6785 s
+Tempo de treino 0.6782 s
+-- B=64 taxa=1.28
+Epoca 51/51 | perda media 0.0280
+Acuracia 95.7% | 1720 acertos em 1797 imagens
+Perda media 0.0515
+Tempo de treino 0.6321 s
+Tempo de treino 0.6321 s
+Tempo de treino 0.6329 s
+Tempo de treino 0.6328 s
+Tempo de treino 0.6318 s
+Tempo de treino 0.6333 s
+Tempo de treino 0.6328 s
+Tempo de treino 0.6327 s
+Tempo de treino 0.6335 s
+Tempo de treino 0.6353 s
+-- B=128 taxa=1.28
+Epoca 51/51 | perda media 0.0367
+Acuracia 95.5% | 1717 acertos em 1797 imagens
+Perda media 0.0533
+Tempo de treino 0.6524 s
+Tempo de treino 0.6544 s
+Tempo de treino 0.6518 s
+Tempo de treino 0.6521 s
+Tempo de treino 0.6508 s
+Tempo de treino 0.6522 s
+Tempo de treino 0.6544 s
+Tempo de treino 0.6520 s
+Tempo de treino 0.6511 s
+Tempo de treino 0.6514 s
+== OpenMP: escalabilidade (B=32, taxa=0.32)
+-- threads=1
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0387
+Tempo de treino 0.7030 s
+Tempo de treino 0.7022 s
+Tempo de treino 0.7023 s
+Tempo de treino 0.7037 s
+Tempo de treino 0.7015 s
+Tempo de treino 0.7008 s
+Tempo de treino 0.7029 s
+Tempo de treino 0.7017 s
+Tempo de treino 0.7041 s
+Tempo de treino 0.7047 s
+-- threads=2
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0387
+Tempo de treino 0.4316 s
+Tempo de treino 0.4339 s
+Tempo de treino 0.4317 s
+Tempo de treino 0.4370 s
+Tempo de treino 0.4285 s
+Tempo de treino 0.4386 s
+Tempo de treino 0.4287 s
+Tempo de treino 0.4314 s
+Tempo de treino 0.4304 s
+Tempo de treino 0.4388 s
+-- threads=4
+Acuracia 96.8% | 1740 acertos em 1797 imagens
+Perda media 0.0380
+Tempo de treino 0.3045 s
+Tempo de treino 0.3031 s
+Tempo de treino 0.3016 s
+Tempo de treino 0.3014 s
+Tempo de treino 0.3018 s
+Tempo de treino 0.3006 s
+Tempo de treino 0.2997 s
+Tempo de treino 0.3034 s
+Tempo de treino 0.3012 s
+Tempo de treino 0.2997 s
+-- threads=8
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0387
+Tempo de treino 0.3951 s
+Tempo de treino 0.4030 s
+Tempo de treino 0.3982 s
+Tempo de treino 0.3991 s
+Tempo de treino 0.4038 s
+Tempo de treino 0.4003 s
+Tempo de treino 0.4126 s
+Tempo de treino 0.4169 s
+Tempo de treino 0.4150 s
+Tempo de treino 0.4206 s
+-- threads=16
+Acuracia 96.7% | 1738 acertos em 1797 imagens
+Perda media 0.0389
+Tempo de treino 2.5524 s
+Tempo de treino 2.5249 s
+Tempo de treino 2.5753 s
+Tempo de treino 2.5729 s
+Tempo de treino 2.5166 s
+Tempo de treino 2.5823 s
+Tempo de treino 2.5082 s
+Tempo de treino 2.6671 s
+Tempo de treino 2.5229 s
+Tempo de treino 2.5227 s
+-- threads=32
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0387
+Tempo de treino 17.2737 s
+Tempo de treino 17.4193 s
+Tempo de treino 17.2034 s
+Tempo de treino 17.2548 s
+Tempo de treino 17.2408 s
+Tempo de treino 17.2681 s
+Tempo de treino 17.1844 s
+Tempo de treino 17.2912 s
+Tempo de treino 17.2146 s
+Tempo de treino 17.2927 s
+-- threads=48
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0387
+Tempo de treino 26.4475 s
+Tempo de treino 26.7639 s
+Tempo de treino 26.8212 s
+Tempo de treino 26.6522 s
+Tempo de treino 26.7514 s
+Tempo de treino 26.5266 s
+Tempo de treino 26.6038 s
+Tempo de treino 26.5227 s
+Tempo de treino 26.7024 s
+Tempo de treino 27.0069 s

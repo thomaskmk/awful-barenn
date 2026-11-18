@@ -1,0 +1,3 @@
+T=1: OK: dentro da tolerância.
+T=4: OK: dentro da tolerância.
+T=16: OK: saída idêntica à referência (exceto o tempo).

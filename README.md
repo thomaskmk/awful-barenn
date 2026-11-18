@@ -161,20 +161,30 @@ Tempo no SD (mediana de 10). Speedup em relação ao código base.
 
 ### 3.2 Paralelismo em CPU
 
-**Por que mini-batch.** No SGD por amostra (`v1.4`), o treino é uma cadeia de 194.973 passos dependentes de ≈ 2,9 µs: a amostra seguinte precisa dos pesos atualizados pela anterior. Cada passo também é uma cadeia de ≈ 7 fases (forward e backward das três camadas), e o paralelismo disponível fica dentro de uma fase: no máximo 32 × 64 multiplicações-somas, ≈ 0,4 µs. Paralelizar uma fase exige uma sincronização ao final dela, uma barreira do OpenMP na CPU ou um lançamento de kernel na GPU, e esse custo é da mesma ordem de grandeza do trabalho da fase, ou maior. O problema é limitado pela latência da cadeia de dependências, enquanto CPU multinúcleo e GPU ganham com vazão. O único paralelismo sem custo de coordenação é o SIMD, dentro de um núcleo. O mini-batch transforma cada passo de matriz × vetor em matriz × matriz: B amostras independentes para cada sincronização.
+**Por que mini-batch.** No SGD por amostra (`v1.4`), o treino é uma cadeia de 194.973 passos dependentes de ≈ 2,9 µs, ou seja a amostra seguinte precisa dos pesos atualizados pela anterior. Cada passo também é uma cadeia de ≈ 7 fases (forward e backward das três camadas), e o paralelismo disponível fica dentro de uma fase: no máximo 32 × 64 multiplicações-somas, ≈ 0,4 µs. Paralelizar uma fase exige uma sincronização ao final dela, uma barreira do OpenMP na CPU ou um lançamento de kernel na GPU, e esse custo é da mesma ordem de grandeza do trabalho da fase, ou maior. 
+
+O único paralelismo sem custo de coordenação é o SIMD, dentro de um núcleo. O mini-batch transforma cada passo de matriz × vetor em matriz × matriz: B amostras independentes para cada sincronização.
 
 Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
 1. **Mini-batch (sequencial).** As amostras de um batch usam os mesmos pesos, com uma única atualização por batch. Como muda o algoritmo, é validado contra o código base por convergência e acurácia.
 2. **OpenMP.** Processa as amostras de cada batch em paralelo. É validado contra a versão sequencial com o mesmo tamanho de batch, com tolerância apertada.
 
-**Configuração fixada.** A mudança de algoritmo exige recalibrar os hiperparâmetros: com a média das correções do batch, batches maiores precisam de taxas maiores. A varredura de B e taxa da #7 fixou **B = 32 e taxa = 0,32** (96,7% de acurácia no teste) para o restante do projeto, incluindo as fases 3 e 4. O mini-batch é a única mudança de algoritmo; as fases seguintes só reorganizam o mesmo cálculo e são validadas contra a `v2.1` com essa configuração.
+**Configuração fixada.** A mudança de algoritmo exige recalibrar os hiperparâmetros: com a média das correções do batch, batches maiores precisam de taxas maiores. A varredura de B e taxa da issue #7 fixou **B = 32 e taxa = 0,32** (96,7% de acurácia no teste) para o restante do projeto, incluindo as fases 3 e 4. O mini-batch é a única mudança de algoritmo; as fases seguintes só reorganizam o mesmo cálculo e são validadas contra a `v2.1` com essa configuração.
 
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
 | [#7](https://github.com/thomaskmk/awful-barenn/issues/7) | `v2.1` | Mini-batch (B = 32, taxa = 0,32), sequencial | 0,575 s | 1,71× |
-| [#8](https://github.com/thomaskmk/awful-barenn/issues/8) | _—_ | OpenMP (threads e SIMD) | _—_ | _—_ |
+| [#8](https://github.com/thomaskmk/awful-barenn/issues/8) | `v2.2` | OpenMP: amostras do batch em paralelo, estado por thread | 0,275 s | 3,57× |
 
-Tempo no SD (mediana de 10, 1 thread na #7). Speedup em relação ao código base.
+Tempo no SD (mediana de 10; 1 thread na #7, 4 threads na #8). Speedup em relação ao código base.
+
+**Escalabilidade.** O melhor ponto é 4 threads (2,09× sobre a `v2.1`). Com 8 threads o tempo volta a subir, e de 16 em diante o treino fica mais lento que o sequencial: com B = 32, cada batch tem ≈ 96 µs de trabalho, e o custo de sincronizar as threads e de mover dados entre os caches dos núcleos a cada batch passa a dominar.
+
+| Threads | 1 | 2 | 4 | 8 | 16 | 32 | 48 |
+|---|---|---|---|---|---|---|---|
+| Tempo de treino | 0,619 s | 0,381 s | **0,275 s** | 0,393 s | 2,53 s | 17,4 s | 26,6 s |
+
+**Descartado.** `#pragma omp simd reduction(+:sum)` no forward: aumentou as instruções do forward em 48% e o tempo com 1 thread em 22% em relação à `v2.1` ([logs](logs/fase2/sd_v2.2_simd)). O laço continua escalar. Alinhar o estado de cada thread a 64 bytes, para evitar falso compartilhamento, não mudou a curva.
 
 ### 3.3 Migração para GPU
 
@@ -204,7 +214,7 @@ Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base
 |---|---|---|---|---|
 | Código base | `v0-baseline` | 0,981 s | 1,0× | 95,5% |
 | CPU otimizada (sequencial) | `v1.4` | 0,571 s | 1,72× | 95,5% |
-| CPU paralela (mini-batch) | _—_ | | | |
+| CPU paralela (mini-batch) | `v2.2` | 0,275 s | 3,57× | 96,7% |
 | CUDA inicial | _—_ | | | |
 | CUDA otimizada | _—_ | | | |
 

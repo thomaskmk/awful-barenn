@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <omp.h>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -21,6 +22,21 @@ namespace Barenn {
 constexpr int entradas = 64;
 constexpr int classes = 10;
 
+// Estado de uma camada durante o treino: os rascunhos de uma amostra e os
+// acumuladores do batch. A camada guarda só os parâmetros; cada thread usa
+// o próprio Estado de cada camada.
+struct alignas(64) Estado {
+    // Dados do último forward usados para calcular os gradientes.
+    const vector<float>* last_input = nullptr; // aponta para a entrada, sem copiar
+    vector<float> last_z;
+    vector<float> out;
+    vector<float> delta;
+    vector<float> grad_in;
+    // Acumuladores do mini-batch: correções já com o sinal e a taxa.
+    vector<vector<float>> grad_w;
+    vector<float> grad_b;
+};
+
 class DenseLayer {
     int in_features;
     int out_features;
@@ -29,22 +45,11 @@ class DenseLayer {
     // weights[i][j] liga a entrada j ao neurônio de saída i.
     vector<vector<float>> weights;
     vector<float> bias;
-    // Dados do último forward usados para calcular os gradientes.
-    const vector<float>* last_input = nullptr; // unico atributo que é preenchido pela camada anterior - nao precisa de valor proprio
-    vector<float> last_z;
-    // buffers para gradiente, delta e output
-    vector<float> out;
-    vector<float> delta;
-    vector<float> grad_in;
-    vector<vector<float>> grad_w; // acumuladores do mini batch GD
-    vector<float> grad_b;
 
 public:
     DenseLayer(int input_size, int output_size, bool is_inicial = false, bool is_final = false)
         : in_features(input_size), out_features(output_size), inicial(is_inicial), final(is_final),
-          weights(output_size, vector<float>(input_size)), bias(output_size, 0), 
-          out(out_features), delta(out_features), grad_in(in_features),
-          grad_w(output_size, vector<float>(input_size)), grad_b(output_size, 0) {
+          weights(output_size, vector<float>(input_size)), bias(output_size, 0) {
         // A semente fixa torna a inicialização de cada camada reproduzível.
         mt19937 gen(1337);
         uniform_real_distribution<float> distribution(-0.05f, 0.05f);
@@ -55,69 +60,93 @@ public:
         }
     }
 
-    const vector<float>& Forward(const vector<float>& input) {
-        last_input = &input;
-        last_z.resize(out_features);
+    // Cria um Estado com os tamanhos desta camada.
+    Estado NovoEstado() const {
+        Estado e;
+        e.last_z.resize(out_features);
+        e.out.resize(out_features);
+        e.delta.resize(out_features);
+        e.grad_in.resize(in_features);
+        e.grad_w.assign(out_features, vector<float>(in_features, 0.0f));
+        e.grad_b.assign(out_features, 0.0f);
+        return e;
+    }
+
+    // const: o forward só lê os parâmetros e escreve no Estado.
+    const vector<float>& Forward(const vector<float>& input, Estado& e) const {
+        e.last_input = &input;
         // Cada neurônio soma o viés aos produtos entre entradas e pesos.
         for (int i = 0; i < out_features; ++i) {
             float sum = bias[i];
+            // Laço escalar de propósito: o #pragma omp simd reduction gerou mais
+            // instruções e deixou o forward mais lento (ver issue #8).
             for (int j = 0; j < in_features; ++j) {
                 sum += input[j] * weights[i][j];
             }
-            last_z[i] = sum;
+            e.last_z[i] = sum;
             // As camadas ocultas usam ReLU. A última devolve escores lineares.
-            out[i] = final ? sum : max(0.0f, sum);
+            e.out[i] = final ? sum : max(0.0f, sum);
         }
-        return out;
+        return e.out;
     }
 
-    const vector<float>& Backward(const vector<float>& grad_out, float learning_rate) {
+    // const: o backward só acumula correções no Estado; os pesos mudam no Atualizar.
+    const vector<float>& Backward(const vector<float>& grad_out, float learning_rate, Estado& e) const {
         // Delta é o gradiente da perda em relação à soma antes da ativação.
         // Na ReLU, o gradiente passa apenas quando essa soma é positiva.
         for (int i = 0; i < out_features; ++i) {
-            delta[i] = final ? grad_out[i]
-                             : grad_out[i] * (last_z[i] > 0.0f ? 1.0f : 0.0f);
+            e.delta[i] = final ? grad_out[i]
+                               : grad_out[i] * (e.last_z[i] > 0.0f ? 1.0f : 0.0f);
         }
 
-        // O gradiente da entrada usa os pesos anteriores à atualização.
-        // SGD por amostra. O gradiente do peso é delta vezes a entrada.
-        // O gradiente do viés é o próprio delta.
-        
+        // O gradiente do peso é delta vezes a entrada; o do viés é o próprio delta.
+        // A camada de entrada não calcula grad_in: ninguém o recebe.
+        const vector<float>& x = *e.last_input;
         if (!inicial) {
-            fill(grad_in.begin(), grad_in.end(), 0.0f);
+            fill(e.grad_in.begin(), e.grad_in.end(), 0.0f);
             for (int i = 0; i < out_features; ++i) {
-                const float d = delta[i];
+                const float d = e.delta[i];
                 for (int j = 0; j < in_features; ++j) {
-                    grad_in[j] += d * weights[i][j];
-                    grad_w[i][j] -= learning_rate * (d * (*last_input)[j]);
+                    e.grad_in[j] += d * weights[i][j];
+                    e.grad_w[i][j] -= learning_rate * (d * x[j]);
                 }
-                grad_b[i] -= learning_rate * delta[i];
+                e.grad_b[i] -= learning_rate * d;
             }
-        } else { // nao calcula pra camada de entrada, o resultado é descartado na main
+        } else {
             for (int i = 0; i < out_features; ++i) {
-                const float d = delta[i];
+                const float d = e.delta[i];
                 for (int j = 0; j < in_features; ++j) {
-                    grad_w[i][j] -= learning_rate * (d * (*last_input)[j]);
+                    e.grad_w[i][j] -= learning_rate * (d * x[j]);
                 }
-                grad_b[i] -= learning_rate * d;
+                e.grad_b[i] -= learning_rate * d;
             }
         }
 
-        return grad_in;
+        return e.grad_in;
     }
 
-    // Aplica as correções acumuladas no batch e zera os acumuladores.
+    // Soma as correções acumuladas por todas as threads, em ordem fixa de thread
+    // (resultado reproduzível), aplica a média e zera os acumuladores.
     // n é o número de amostras do batch (o último batch pode ser menor).
-    // a perda de um batch é a média das perdas das amostras
-    void Atualizar(size_t n) {
+    void Atualizar(vector<Estado>& estados, size_t n) {
         const float inv = 1.0f / n;
         for (int i = 0; i < out_features; ++i) {
             for (int j = 0; j < in_features; ++j) {
-                weights[i][j] += grad_w[i][j] * inv;
-                grad_w[i][j] = 0.0f;
+                float soma = estados[0].grad_w[i][j];
+                estados[0].grad_w[i][j] = 0.0f;
+                for (size_t t = 1; t < estados.size(); ++t) {
+                    soma += estados[t].grad_w[i][j];
+                    estados[t].grad_w[i][j] = 0.0f;
+                }
+                weights[i][j] += soma * inv;
             }
-            bias[i] += grad_b[i] * inv;
-            grad_b[i] = 0.0f;
+            float soma_b = estados[0].grad_b[i];
+            estados[0].grad_b[i] = 0.0f;
+            for (size_t t = 1; t < estados.size(); ++t) {
+                soma_b += estados[t].grad_b[i];
+                estados[t].grad_b[i] = 0.0f;
+            }
+            bias[i] += soma_b * inv;
         }
     }
 };
@@ -182,8 +211,12 @@ float perda(const vector<float>& escores, int rotulo,
     return total;
 }
 
-void avaliar(DenseLayer& l1, DenseLayer& l2, DenseLayer& l3,
+void avaliar(const DenseLayer& l1, const DenseLayer& l2, const DenseLayer& l3,
              const vector<Amostra>& teste) {
+    // Só forward: um Estado por camada, sem uso dos acumuladores.
+    Estado e1 = l1.NovoEstado();
+    Estado e2 = l2.NovoEstado();
+    Estado e3 = l3.NovoEstado();
     struct Exemplo {
         size_t linha;
         int real;
@@ -204,7 +237,7 @@ void avaliar(DenseLayer& l1, DenseLayer& l2, DenseLayer& l3,
     // Só fazemos forward aqui. Os pesos ficam fixos.
     for (size_t i = 0; i < teste.size(); ++i) {
         const auto& amostra = teste[i];
-        const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem)));
+        const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1), e2), e3);
         // O índice do maior escore indica a classe prevista.
         int previsto = static_cast<int>(
             max_element(escores.begin(), escores.end()) - escores.begin());
@@ -320,8 +353,22 @@ int main(int argc, char** argv) {
         Barenn::DenseLayer l1(Barenn::entradas, 32, /*inicial=*/true);
         Barenn::DenseLayer l2(32, 16);
         Barenn::DenseLayer l3(16, Barenn::classes, /*inicial=*/false, /*final=*/true);
-        vector<float> gradiente(Barenn::classes);
         array<double, epocas> perdas{};
+
+        // Estado de treino por thread e por camada (rascunhos e acumuladores),
+        // criado uma vez. Cada thread aloca o próprio estado: a memória fica
+        // separada entre as threads e no processador de quem a usa.
+        const int nthreads = omp_get_max_threads();
+        vector<Barenn::Estado> e1(nthreads), e2(nthreads), e3(nthreads);
+        vector<vector<float>> gradientes(nthreads);
+        #pragma omp parallel
+        {
+            const int t = omp_get_thread_num();
+            e1[t] = l1.NovoEstado();
+            e2[t] = l2.NovoEstado();
+            e3[t] = l3.NovoEstado();
+            gradientes[t].assign(Barenn::classes, 0.0f);
+        }
 
         // A medição inclui forward, perda e backward de todas as épocas.
         const auto inicio = chrono::steady_clock::now();
@@ -332,23 +379,28 @@ int main(int argc, char** argv) {
                 // O último batch pode ser menor que batch_size.
                 size_t fim_batch = min(inicio_batch + batch_size, treino.size());
 
+                // As amostras do batch são independentes: cada thread processa
+                // as suas com o próprio estado. static: trabalho igual por amostra
+                // e a mesma divisão em toda execução.
+                #pragma omp parallel for schedule(static) reduction(+:perda_total)
                 for (size_t s = inicio_batch; s < fim_batch; ++s) {
+                    const int t = omp_get_thread_num();
                     const auto& amostra = treino[s];
-                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem)));
-                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradiente);
-                    
+                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1[t]), e2[t]), e3[t]);
+                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradientes[t]);
+
                     // Propaga o gradiente da última camada até a primeira.
-                    // Cada Backward acumula as correções da sua camada, sem alterar os pesos.
-                    const auto& grad3 = l3.Backward(gradiente, taxa);
-                    const auto& grad2 = l2.Backward(grad3, taxa);
-                    l1.Backward(grad2, taxa);
+                    // Cada Backward acumula as correções no estado da thread, sem alterar os pesos.
+                    const auto& grad3 = l3.Backward(gradientes[t], taxa, e3[t]);
+                    const auto& grad2 = l2.Backward(grad3, taxa, e2[t]);
+                    l1.Backward(grad2, taxa, e1[t]);
                 }
 
-                // Uma atualização por batch, com a média das correções.
+                // Uma atualização por batch, com a média das correções de todas as threads.
                 const size_t n = fim_batch - inicio_batch;
-                l1.Atualizar(n);
-                l2.Atualizar(n);
-                l3.Atualizar(n);
+                l1.Atualizar(e1, n);
+                l2.Atualizar(e2, n);
+                l3.Atualizar(e3, n);
             }
             perdas[epoca] = perda_total / treino.size();
         }
