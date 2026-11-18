@@ -31,19 +31,22 @@ O objetivo é reduzir o tempo de treino sem corromper o resultado: primeiro otim
 
 | | Santos Dumont (LNCC) | Franky (Insper) |
 |---|---|---|
-| CPU | 2 × Intel Xeon Gold 6252 @ 2,10 GHz (Cascade Lake, 24 núcleos cada, sem hyperthreading) | _a registrar_ |
-| Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `merry_cpu`, `merry_gpu` |
-| Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | _a registrar_ |
+| CPU | 2 × Intel Xeon Gold 6252 @ 2,10 GHz (Cascade Lake, 24 núcleos cada, sem hyperthreading) | Intel Core i7-13700T (8 núcleos P até 4,8 GHz e 8 núcleos E); cada job recebe 8 núcleos P, uma thread por núcleo |
+| GPU | _a registrar_ | NVIDIA RTX A1000 (8 GB, *compute capability* 8.6) |
+| Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `sunny_cpu`, `sunny_gpu` |
+| Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | gcc 14.2 (padrão do cluster) |
 | CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) |
-| Profilers | valgrind 3.19 (callgrind), perf | _a registrar_ |
+| Profilers | valgrind 3.19 (callgrind), perf | nenhum de CPU (sem valgrind e perf nos nós) |
 
-Todas as medições e evidências deste relatório vêm desses dois clusters.
+Todas as medições e evidências deste relatório vêm desses dois clusters. Hardware e compilador diferem entre eles, então a comparação entre os clusters é pelo speedup sobre o código base de cada um. O ambiente do Franky está registrado em [logs/base/franky_ambiente.txt](logs/base/franky_ambiente.txt).
 
 ### 1.3 Decisões de compilação
 
 - **gcc 13.2 no Santos Dumont.** O g++ padrão do SD é o gcc 8. Nele, o `std::filesystem` (usado em `main`) só funciona com `-std=c++17` mais o link manual `-lstdc++fs`. O gcc 13.2 foi escolhido  por ser a versão mais nova aceita como compilador de CPU pelo CUDA 12.6, que é o padrão do SD. Assim, o mesmo compilador serve nas fases de CPU e de GPU.
 - **`-std=c++17` explícito.** O gcc 8 compila em C++14 por padrão, e o código exige C++17.
-- **Compilação dentro do job.** Cada script em [slurm/](slurm/) compila antes de executar. As flags ficam versionadas junto com cada tag, e o binário é gerado no nó onde vai rodar.
+- **gcc 14.2 no Franky.** É o compilador padrão do cluster e é aceito pelo CUDA 12.8.
+- **Compilação dentro do job no SD.** Cada script `sd_*` em [slurm/](slurm/) compila antes de executar. As flags ficam versionadas junto com cada tag, e o binário é gerado no nó onde vai rodar.
+- **Compilação no nó de login no Franky.** Os nós de cálculo do Franky não têm os cabeçalhos da glibc, então a compilação dentro do job falha. Como no material da disciplina, o binário é compilado no nó de login e o slurm só o executa. O comando de compilação fica no cabeçalho de cada script `franky_*`.
 - **Baseline com `-O3`.** Todo binário, desde a versão base até a versão otimizada em GPU, usa a flag O3.
 
 ### 1.4 Validação da corretude
@@ -62,13 +65,19 @@ REF_BIN=./barenn_seq scripts/check.sh ./barenn_omp  # entre duas versões do mes
 ### 1.5 Como reproduzir
 
 ```bash
-git checkout <tag>
-sbatch slurm/sd_fase<X>.slurm      # ou franky_fase<X>.slurm (a partir da raiz do repositório)
+git checkout <tag>                 # a partir da raiz do repositório
+
+# Santos Dumont: o job compila
+sbatch slurm/sd_fase<X>.slurm
+
+# Franky: compile no nó de login antes de submeter
+g++ -std=c++17 -O3 -fopenmp barenn.cpp -o barenn
+sbatch slurm/franky_fase<X>.slurm
 ```
 
-Há um slurm por ambiente e por fase. Nas tags `v0-baseline` a `v1.3`, os de CPU se chamam `sd_cpu.slurm` e `franky_cpu.slurm`.
+Há um slurm por ambiente e por fase. Nas tags `v0-baseline` a `v1.3`, os de CPU se chamam `sd_cpu.slurm` e `franky_cpu.slurm`. Os slurms do Franky foram corrigidos depois da `v2.2`: nas tags anteriores eles ainda compilam dentro do job, o que falha no cluster. Para medir uma tag antiga no Franky, compile o código da tag e submeta o slurm do `master`.
 
-Cada job compila e mede o tempo de treino em 10 execuções. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …).
+Cada job mede o tempo de treino em 10 execuções. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …), com o prefixo do cluster (`sd_`, `franky_`).
 
 ---
 
@@ -181,7 +190,10 @@ Tempo no SD (mediana de 10; 1 thread na #7, 4 threads na #8). Speedup em relaç�
 
 | Threads | 1 | 2 | 4 | 8 | 16 | 32 | 48 |
 |---|---|---|---|---|---|---|---|
-| Tempo de treino | 0,619 s | 0,381 s | **0,275 s** | 0,393 s | 2,53 s | 17,4 s | 26,6 s |
+| SD | 0,619 s | 0,381 s | **0,275 s** | 0,393 s | 2,53 s | 17,4 s | 26,6 s |
+| Franky | 0,204 s | 0,167 s | **0,133 s** | 0,177 s | — | — | — |
+
+No Franky, cada job tem 8 núcleos, e a curva tem o mesmo formato: o melhor ponto também é 4 threads, mas o ganho sobre a `v2.1` é menor (1,50× contra 2,09×). Os núcleos são mais rápidos, então cada batch tem só ≈ 32 µs de trabalho, enquanto o custo de sincronizar as threads não diminui na mesma proporção ([log](logs/fase2/franky_v2.2)).
 
 **Descartado.** `#pragma omp simd reduction(+:sum)` no forward: aumentou as instruções do forward em 48% e o tempo com 1 thread em 22% em relação à `v2.1` ([logs](logs/fase2/sd_v2.2_simd)). O laço continua escalar. Alinhar o estado de cada thread a 64 bytes, para evitar falso compartilhamento, não mudou a curva.
 
@@ -221,8 +233,10 @@ Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base
 
 | Versão | Tag | Tempo de treino | Speedup | Acurácia |
 |---|---|---|---|---|
-| Código base | `v0-baseline` | | 1,0× | |
-| CPU otimizada (sequencial) | _—_ | | | |
-| CPU paralela (mini-batch) | _—_ | | | |
+| Código base | `v0-baseline` | 0,354 s | 1,0× | 95,5% |
+| CPU otimizada (sequencial) | `v1.4` | 0,189 s | 1,87× | 95,5% |
+| CPU paralela (mini-batch) | `v2.2` | 0,133 s | 2,67× | 96,7% |
 | CUDA inicial | _—_ | | | |
 | CUDA otimizada | _—_ | | | |
+
+A `v2.2` usa 4 threads nos dois clusters. No Franky, a saída de todas as versões passou no `check.sh` com o mesmo resultado do SD: idêntica ao código base na fase 1 e na `v2.1`; na `v2.2`, idêntica à `v2.1` com 1 thread e dentro da tolerância com 4 e 8 threads ([log](logs/fase2/franky_check_v2.2.txt)).
