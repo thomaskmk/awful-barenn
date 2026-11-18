@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <omp.h>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -77,6 +78,7 @@ public:
         // Cada neurônio soma o viés aos produtos entre entradas e pesos.
         for (int i = 0; i < out_features; ++i) {
             float sum = bias[i];
+            #pragma omp simd reduction(+:sum)
             for (int j = 0; j < in_features; ++j) {
                 sum += input[j] * weights[i][j];
             }
@@ -122,17 +124,28 @@ public:
         return e.grad_in;
     }
 
-    // Aplica a média das correções acumuladas no batch e zera os acumuladores.
+    // Soma as correções acumuladas por todas as threads, em ordem fixa de thread
+    // (resultado reproduzível), aplica a média e zera os acumuladores.
     // n é o número de amostras do batch (o último batch pode ser menor).
-    void Atualizar(Estado& e, size_t n) {
+    void Atualizar(vector<Estado>& estados, size_t n) {
         const float inv = 1.0f / n;
         for (int i = 0; i < out_features; ++i) {
             for (int j = 0; j < in_features; ++j) {
-                weights[i][j] += e.grad_w[i][j] * inv;
-                e.grad_w[i][j] = 0.0f;
+                float soma = estados[0].grad_w[i][j];
+                estados[0].grad_w[i][j] = 0.0f;
+                for (size_t t = 1; t < estados.size(); ++t) {
+                    soma += estados[t].grad_w[i][j];
+                    estados[t].grad_w[i][j] = 0.0f;
+                }
+                weights[i][j] += soma * inv;
             }
-            bias[i] += e.grad_b[i] * inv;
-            e.grad_b[i] = 0.0f;
+            float soma_b = estados[0].grad_b[i];
+            estados[0].grad_b[i] = 0.0f;
+            for (size_t t = 1; t < estados.size(); ++t) {
+                soma_b += estados[t].grad_b[i];
+                estados[t].grad_b[i] = 0.0f;
+            }
+            bias[i] += soma_b * inv;
         }
     }
 };
@@ -339,12 +352,22 @@ int main(int argc, char** argv) {
         Barenn::DenseLayer l1(Barenn::entradas, 32, /*inicial=*/true);
         Barenn::DenseLayer l2(32, 16);
         Barenn::DenseLayer l3(16, Barenn::classes, /*inicial=*/false, /*final=*/true);
-        // Estado de treino de cada camada (rascunhos e acumuladores).
-        Barenn::Estado e1 = l1.NovoEstado();
-        Barenn::Estado e2 = l2.NovoEstado();
-        Barenn::Estado e3 = l3.NovoEstado();
-        vector<float> gradiente(Barenn::classes);
         array<double, epocas> perdas{};
+
+        // Estado de treino por thread e por camada (rascunhos e acumuladores),
+        // criado uma vez. Cada thread aloca o próprio estado: a memória fica
+        // separada entre as threads e no processador de quem a usa.
+        const int nthreads = omp_get_max_threads();
+        vector<Barenn::Estado> e1(nthreads), e2(nthreads), e3(nthreads);
+        vector<vector<float>> gradientes(nthreads);
+        #pragma omp parallel
+        {
+            const int t = omp_get_thread_num();
+            e1[t] = l1.NovoEstado();
+            e2[t] = l2.NovoEstado();
+            e3[t] = l3.NovoEstado();
+            gradientes[t].assign(Barenn::classes, 0.0f);
+        }
 
         // A medição inclui forward, perda e backward de todas as épocas.
         const auto inicio = chrono::steady_clock::now();
@@ -355,19 +378,24 @@ int main(int argc, char** argv) {
                 // O último batch pode ser menor que batch_size.
                 size_t fim_batch = min(inicio_batch + batch_size, treino.size());
 
+                // As amostras do batch são independentes: cada thread processa
+                // as suas com o próprio estado. static: trabalho igual por amostra
+                // e a mesma divisão em toda execução.
+                #pragma omp parallel for schedule(static) reduction(+:perda_total)
                 for (size_t s = inicio_batch; s < fim_batch; ++s) {
+                    const int t = omp_get_thread_num();
                     const auto& amostra = treino[s];
-                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1), e2), e3);
-                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradiente);
+                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1[t]), e2[t]), e3[t]);
+                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradientes[t]);
 
                     // Propaga o gradiente da última camada até a primeira.
-                    // Cada Backward acumula as correções da sua camada, sem alterar os pesos.
-                    const auto& grad3 = l3.Backward(gradiente, taxa, e3);
-                    const auto& grad2 = l2.Backward(grad3, taxa, e2);
-                    l1.Backward(grad2, taxa, e1);
+                    // Cada Backward acumula as correções no estado da thread, sem alterar os pesos.
+                    const auto& grad3 = l3.Backward(gradientes[t], taxa, e3[t]);
+                    const auto& grad2 = l2.Backward(grad3, taxa, e2[t]);
+                    l1.Backward(grad2, taxa, e1[t]);
                 }
 
-                // Uma atualização por batch, com a média das correções.
+                // Uma atualização por batch, com a média das correções de todas as threads.
                 const size_t n = fim_batch - inicio_batch;
                 l1.Atualizar(e1, n);
                 l2.Atualizar(e2, n);
