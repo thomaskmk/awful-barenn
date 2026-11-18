@@ -31,7 +31,7 @@ O objetivo é reduzir o tempo de treino sem corromper o resultado: primeiro otim
 
 | | Santos Dumont (LNCC) | Franky (Insper) |
 |---|---|---|
-| CPU | Intel Xeon Gold 6152 @ 2,10 GHz (Skylake-SP, AVX-512) | _a registrar_ |
+| CPU | 2 × Intel Xeon Gold 6252 @ 2,10 GHz (Cascade Lake, 24 núcleos cada, sem hyperthreading) | _a registrar_ |
 | Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `merry_cpu`, `merry_gpu` |
 | Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | _a registrar_ |
 | CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) |
@@ -74,7 +74,7 @@ Cada job compila e mede o tempo de treino em 10 execuções. Os logs ficam em `l
 
 ## 2. Baseline: identificação dos gargalos
 
-Código base na tag `v0-baseline`, compilado com `g++ -std=c++17 -O3 -g` (gcc 13.2) no Xeon Gold 6152 do SD.
+Código base na tag `v0-baseline`, compilado com `g++ -std=c++17 -O3 -g` (gcc 13.2), nos nós de cálculo do SD (Xeon Gold 6252).
 
 | Métrica | Valor |
 |---|---|
@@ -118,12 +118,12 @@ Pelo callgrind:
 
 O modelo roofline compara o desempenho alcançado com dois tetos do hardware: o de cálculo e o de banda de memória. Qual deles limita o código depende da intensidade aritmética, ou seja, quantos FLOPs são feitos por byte trazido da memória.
 
-- **Teto de cálculo.** Com `-O3`, o compilador gera SSE (vetores de 4 floats) sem FMA. O Skylake executa até duas dessas operações por ciclo[^skylake], o que dá um teto de cerca de 17 GFLOP/s por núcleo (2 × 4 floats × 2,1 GHz).
+- **Teto de cálculo.** Com `-O3`, o compilador gera SSE (vetores de 4 floats) sem FMA. O Cascade Lake executa até duas dessas operações por ciclo[^skylake], o que dá um teto de cerca de 17 GFLOP/s por núcleo (2 × 4 floats × 2,1 GHz).
 - **Intensidade aritmética.** Os pesos ficam no L1 durante todo o treino, então o único dado novo a cada amostra é a imagem: 64 floats (256 bytes) para 16.320 FLOPs, cerca de 64 FLOP/byte. Para alimentar o teto de cálculo bastaria uma banda de 17 / 64 ≈ 0,27 GB/s, muito abaixo da banda de memória do nó.
 
 O baseline está na região limitada por cálculo e atinge cerca de 3,2 GFLOP/s (3,2 GFLOP em 0,981 s), **cerca de 19% do teto**. O que separa o código do teto não é a memória, e sim o excesso de instruções e os laços que não vetorizam.
 
-[^skylake]: Intel 64 and IA-32 Architectures Optimization Reference Manual, seção da microarquitetura Skylake: as portas 0 e 1 executam multiplicação e soma em ponto flutuante.
+[^skylake]: Intel 64 and IA-32 Architectures Optimization Reference Manual, seção da microarquitetura Skylake, base do Cascade Lake: as portas 0 e 1 executam multiplicação e soma em ponto flutuante.
 
 ### 2.5 Gargalos identificados
 
