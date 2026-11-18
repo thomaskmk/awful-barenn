@@ -25,7 +25,7 @@ constexpr int classes = 10;
 // Estado de uma camada durante o treino: os rascunhos de uma amostra e os
 // acumuladores do batch. A camada guarda só os parâmetros; cada thread usa
 // o próprio Estado de cada camada.
-struct Estado {
+struct alignas(64) Estado {
     // Dados do último forward usados para calcular os gradientes.
     const vector<float>* last_input = nullptr; // aponta para a entrada, sem copiar
     vector<float> last_z;
@@ -78,7 +78,8 @@ public:
         // Cada neurônio soma o viés aos produtos entre entradas e pesos.
         for (int i = 0; i < out_features; ++i) {
             float sum = bias[i];
-            #pragma omp simd reduction(+:sum)
+            // Laço escalar de propósito: o #pragma omp simd reduction gerou mais
+            // instruções e deixou o forward mais lento (ver issue #8).
             for (int j = 0; j < in_features; ++j) {
                 sum += input[j] * weights[i][j];
             }
