@@ -138,7 +138,6 @@ O baseline está na região limitada por cálculo e atinge cerca de 3,2 GFLOP/s 
 **Descartados**
 - **Pré-alocar vetores na leitura dos dados:** afetaria no máximo os 4,4% de `ler_dados`, dominados pela conversão de texto em `float`, e fora do cronômetro.
 - **Paralelizar o cálculo da perda:** 10 operações por amostra (< 0,2%), custaria mais em sincronização do que economizaria.
-- **Matriz de pesos contígua no lugar de `vector<vector<float>>`:** _medição no SD pendente_. Os laços que percorrem a linha carregam o ponteiro uma vez por linha, e a matriz inteira cabe no L1.
 
 ---
 
