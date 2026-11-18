@@ -1,0 +1,30 @@
+== nó de login: head-node (onde se compila)
+Model name:                              Intel(R) Core(TM) i7-7820HK CPU @ 2.90GHz
+g++ (GCC) 14.2.0
+Cuda compilation tools, release 12.8, V12.8.93
+cabeçalhos da glibc: /usr/include/features.h
+
+== nó de CPU: compute10 (sunny_cpu, --cpus-per-task=16)
+CPU(s):                               24
+Model name:                           13th Gen Intel(R) Core(TM) i7-13700T
+Thread(s) per core:                   2
+Core(s) per socket:                   16
+Socket(s):                            1
+CPU(s) scaling MHz:                   39%
+L1d cache:                            640 KiB (16 instances)
+L2 cache:                             24 MiB (10 instances)
+L3 cache:                             30 MiB (1 instance)
+núcleos P (cpu_core): 0-15   núcleos E (cpu_atom): 16-23
+CPU CORE    MAXMHZ
+  0    0 4800.0000
+  1    0 4800.0000
+ 16    8 3600.0000
+CPUs do job: 8 -> 0,2,4,6,8,10,12,14 (um thread de cada núcleo P)
+cabeçalhos da glibc: ls: cannot access '/usr/include/features.h': No such file or directory
+valgrind: ausente   perf: ausente
+
+== nó de GPU: compute20 (sunny_gpu)
+Model name:                           Intel(R) Core(TM) i9-14900
+name, compute_cap, memory.total [MiB], driver_version
+NVIDIA RTX A1000, 8.6, 8188 MiB, 570.124.06
+cabeçalhos da glibc: ls: cannot access '/usr/include/features.h': No such file or directory

@@ -1,0 +1,3 @@
+Referência: /home/thomaskmk/scratch/aps2/bin/franky_v0-baseline
+Candidato:  /home/thomaskmk/scratch/aps2/bin/franky_v2.1
+OK: saída idêntica à referência (exceto o tempo).
