@@ -1,18 +1,19 @@
 #!/bin/bash
 #SBATCH --job-name=barenn-fase3
 #SBATCH --output=logs/fase3/franky_fase3_%j.out
-#SBATCH --partition=merry_gpu
+#SBATCH --partition=sunny_gpu
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --mem=1G
 #SBATCH --time=00:10:00
 
-# Submeta da raiz do repositório: sbatch slurm/franky_fase3.slurm
+# Os nós de cálculo do Franky não têm os cabeçalhos da glibc: compile no nó de login.
+# Da raiz do repositório:
+#   module load cuda/12.8.1
+#   nvcc -O3 barenn.cu -o barenn_gpu
+#   sbatch slurm/franky_fase3.slurm
 
-module load cuda/12.8.1
 nvidia-smi
-
-nvcc -O3 barenn.cu -o barenn_gpu
 
 ./barenn_gpu
 
