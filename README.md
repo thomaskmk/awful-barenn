@@ -245,6 +245,7 @@ Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, s
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
 | [#17](https://github.com/thomaskmk/awful-barenn/issues/17) | `v4.1` | Kernels de um batch fundidos em um bloco; pesos copiados para a memória compartilhada a cada batch | 0,116 s | 3,06× |
+| [#18](https://github.com/thomaskmk/awful-barenn/issues/18) | `v4.2` | Treino inteiro em um kernel, com os pesos na memória compartilhada (bloco de 1.024 threads) | 0,1005 s | 3,52× |
 
 Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar.
 
@@ -263,6 +264,25 @@ A correção foi copiar os pesos para a memória compartilhada no início de cad
 Com isso, a GPU passa a CPU pela primeira vez: 0,116 s, contra 0,124 s da `v3.1` com 4 threads ([relatório](logs/fase4/nsys_v4.1.txt)).
 
 **Ocupação teórica.** Pela compilação de diagnóstico para a RTX A1000 (`--resource-usage`), o kernel usa 42 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. O bloco de 1.024 threads ocupa 32 dos 48 warps de um SM (67%), mas é o único bloco: 1 dos 18 SMs da GPU trabalha. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
+
+**Treino em um kernel.** O laço de épocas e de batches entra no kernel, e os pesos e os vieses ficam na memória compartilhada do começo ao fim: são lidos da memória global uma vez, no início, e gravados de volta uma vez, no fim. Entre um batch e o seguinte, uma barreira substitui o lançamento, e os 6.120 lançamentos viram 1. A saída é idêntica à da `v4.1` ([log](logs/fase4/franky_check_v4.2.txt)).
+
+| | `v4.1` | `v4.2` |
+|---|---|---|
+| Lançamentos | 6.120 | 1 |
+| Tempo de GPU por batch | 18,4 µs | 16,4 µs |
+| Tempo de treino | 0,116 s | **0,1005 s** |
+
+O ganho, ≈ 2 µs por batch, é o lançamento e a cópia dos pesos que cada batch fazia ([relatório](logs/fase4/nsys_v4.2.txt)). Os 16,4 µs que sobram são o cálculo do batch em um único SM: ≈ 200 mil multiplicações-somas em 8 etapas separadas por barreiras, com cada thread fazendo suas somas em sequência.
+
+**Tamanho do bloco** (variável `BLOCO`, [log](logs/fase4/franky_v4.2)):
+
+| Threads por bloco | 256 | 512 | 1.024 |
+|---|---|---|---|
+| Warps no SM (ocupação teórica) | 8 (17%) | 16 (33%) | 32 (67%) |
+| Tempo de treino | 0,107 s | 0,101 s | **0,1005 s** |
+
+Com menos threads, cada uma processa mais elementos em sequência em cada etapa, e sobram menos warps para o SM alternar enquanto outros esperam uma leitura. As barreiras ficam mais baratas, mas não compensam. O padrão é 1.024 threads. O kernel usa 56 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.2.txt)), e ≈ 34 KB de memória compartilhada com B = 32; o limite de batch continua em 52.
 
 ---
 
@@ -288,6 +308,6 @@ Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base
 | CPU otimizada (sequencial) | `v1.4` | 0,189 s | 1,87× | 95,5% |
 | CPU paralela (mini-batch) | `v2.2` | 0,133 s | 2,67× | 96,7% |
 | CUDA inicial | `v3.2` | 0,217 s | 1,63× | 96,7% |
-| CUDA otimizada | _—_ | | | |
+| CUDA otimizada | `v4.2` | 0,1005 s | 3,52× | 96,7% |
 
 A `v2.2` usa 4 threads nos dois clusters. No Franky, a saída de todas as versões passou no `check.sh` com o mesmo resultado do SD: idêntica ao código base na fase 1 e na `v2.1`; na `v2.2`, idêntica à `v2.1` com 1 thread e dentro da tolerância com 4 e 8 threads ([log](logs/fase2/franky_check_v2.2.txt)).
