@@ -244,7 +244,25 @@ Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, s
 
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
-| _—_ | _—_ | _—_ | _—_ | _—_ |
+| [#17](https://github.com/thomaskmk/awful-barenn/issues/17) | `v4.1` | Kernels de um batch fundidos em um bloco; pesos copiados para a memória compartilhada a cada batch | 0,116 s | 3,06× |
+
+Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar.
+
+**Fusão em um bloco.** Os 9 kernels de um batch viram etapas de um único kernel, executado por um bloco de 1.024 threads, com uma barreira (`__syncthreads`) entre as etapas. A entrada, as ativações e os deltas do batch ficam na memória compartilhada, e os lançamentos caem de 55.080 para 6.120. Cada etapa distribui seus elementos entre as threads de `blockDim.x` em `blockDim.x`, então o tamanho do bloco é só um parâmetro. A saída é idêntica à da `v3.2` ([log](logs/fase4/franky_check_v4.1.txt)).
+
+A primeira versão, com os pesos lidos da memória global, ficou **mais lenta** que a `v3.2`: 0,344 s, com 56 µs por batch ([log](logs/fase4/franky_v4.1_pesos_globais), [relatório](logs/fase4/nsys_v4.1_pesos_globais.txt)). No forward, as 32 threads de um warp calculam 32 neurônios diferentes e, a cada passo do produto escalar, leem a mesma coluna de 32 linhas da matriz de pesos, a 256 bytes uma da outra: cada leitura busca 32 linhas de cache. Na `v3.2`, essas leituras se dividiam entre vários SMs; com um bloco só, todas passam pelo L1 de um único SM.
+
+A correção foi copiar os pesos para a memória compartilhada no início de cada batch, com leitura coalescida da memória global. O forward e a propagação passam a ler dessa cópia; a atualização continua escrevendo na global, também de forma coalescida. Na cópia, cada linha ocupa `in_features + 1` posições: com passo 64, as 32 leituras da mesma coluna cairiam no mesmo banco da memória compartilhada; com passo 65, caem em 32 bancos diferentes.
+
+| | `v3.2` | `v4.1`, pesos na global | `v4.1` |
+|---|---|---|---|
+| Lançamentos | 55.080 | 6.120 | 6.120 |
+| Tempo de GPU por batch | ≈ 34 µs (9 kernels) | 56 µs | 18,4 µs |
+| Tempo de treino | 0,217 s | 0,344 s | **0,116 s** |
+
+Com isso, a GPU passa a CPU pela primeira vez: 0,116 s, contra 0,124 s da `v3.1` com 4 threads ([relatório](logs/fase4/nsys_v4.1.txt)).
+
+**Ocupação teórica.** Pela compilação de diagnóstico para a RTX A1000 (`--resource-usage`), o kernel usa 42 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. O bloco de 1.024 threads ocupa 32 dos 48 warps de um SM (67%), mas é o único bloco: 1 dos 18 SMs da GPU trabalha. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
 
 ---
 
