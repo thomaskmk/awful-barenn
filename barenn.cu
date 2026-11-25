@@ -51,6 +51,12 @@ constexpr int threads_por_bloco = 1024;
 // ativações das três camadas e os deltas das três camadas.
 constexpr int floats_por_amostra = entradas + 2 * (oculta1 + oculta2 + classes);
 
+// Floats da cópia dos pesos na memória compartilhada. Cada linha ocupa
+// in_features + 1 posições: no forward, as 32 threads de um warp leem a mesma
+// coluna de 32 linhas, e com passo 64 todas cairiam no mesmo banco.
+constexpr int floats_pesos =
+    oculta1 * (entradas + 1) + oculta2 * (oculta1 + 1) + classes * (oculta2 + 1);
+
 // ---------------------------------------------------------------------------
 // CPU: dados, parâmetros iniciais e avaliação (os mesmos do barenn.cpp)
 // ---------------------------------------------------------------------------
@@ -260,16 +266,24 @@ void avaliar(const Camada& l1, const Camada& l2, const Camada& l3, const Dados& 
 // feita pelo nvcc.
 // ---------------------------------------------------------------------------
 
+// Copia os pesos de uma camada da memória global para a compartilhada, com
+// passo in_features + 1 entre as linhas. A leitura da global é coalescida.
+__device__ void copiar_pesos(const float* W, float* w, int in_features, int out_features) {
+    for (int k = threadIdx.x; k < out_features * in_features; k += blockDim.x) {
+        w[(k / in_features) * (in_features + 1) + k % in_features] = W[k];
+    }
+}
+
 // Forward de uma camada. Um elemento por neurônio de uma amostra:
-// idx = s * out_features + i.
-__device__ void forward_camada(const float* entrada, const float* W, const float* b,
+// idx = s * out_features + i. A linha i dos pesos começa em W + i * passo.
+__device__ void forward_camada(const float* entrada, const float* W, int passo, const float* b,
                                float* saida, int n, int in_features, int out_features,
                                bool final) {
     for (int idx = threadIdx.x; idx < n * out_features; idx += blockDim.x) {
         const int s = idx / out_features;
         const int i = idx % out_features;
         const float* x = entrada + s * in_features;
-        const float* w = W + i * in_features; // linha i
+        const float* w = W + i * passo; // linha i
         float sum = b[i];
         for (int j = 0; j < in_features; ++j) {
             sum += x[j] * w[j];
@@ -297,16 +311,17 @@ __device__ void perda_saida(const float* escores, const int* rotulos,
 // Delta da camada anterior. Um elemento por entrada de uma amostra:
 // idx = s * in_features + j. O grad_in[j] soma delta[i] * W[i][j] na ordem de i,
 // e a derivada da ReLU da camada anterior deixa passar só onde a ativação é
-// positiva, o que equivale a z > 0.
-__device__ void propagar_delta(const float* delta, const float* W, const float* ativacao_anterior,
-                               float* delta_anterior, int n, int in_features, int out_features) {
+// positiva, o que equivale a z > 0. A linha i dos pesos começa em W + i * passo.
+__device__ void propagar_delta(const float* delta, const float* W, int passo,
+                               const float* ativacao_anterior, float* delta_anterior,
+                               int n, int in_features, int out_features) {
     for (int idx = threadIdx.x; idx < n * in_features; idx += blockDim.x) {
         const int s = idx / in_features;
         const int j = idx % in_features;
         const float* d = delta + s * out_features;
         float grad = 0.0f;
         for (int i = 0; i < out_features; ++i) {
-            grad += d[i] * W[i * in_features + j];
+            grad += d[i] * W[i * passo + j];
         }
         delta_anterior[idx] = grad * (ativacao_anterior[idx] > 0.0f ? 1.0f : 0.0f);
     }
@@ -340,41 +355,49 @@ __device__ void atualizar_camada(float* W, float* b, const float* delta, const f
 }
 
 // Treina um batch de n amostras em um único bloco. Os pesos ficam na memória
-// global; a entrada, as ativações e os deltas do batch, na compartilhada.
+// global, onde são atualizados; no início, o bloco copia os pesos para a
+// memória compartilhada, de onde o forward e a propagação os leem. A entrada,
+// as ativações e os deltas do batch também ficam na compartilhada.
 __global__ void __launch_bounds__(threads_por_bloco)
 treinar_batch_kernel(const float* entrada, const int* rotulos,
                      float* W1, float* b1, float* W2, float* b2, float* W3, float* b3,
                      float* perda_amostra, int n, float taxa, float inv) {
     extern __shared__ float compartilhada[];
-    float* x = compartilhada;      // n × entradas
-    float* a1 = x + n * entradas;  // n × oculta1
-    float* a2 = a1 + n * oculta1;  // n × oculta2
-    float* a3 = a2 + n * oculta2;  // n × classes (escores)
-    float* d1 = a3 + n * classes;  // n × oculta1
-    float* d2 = d1 + n * oculta1;  // n × oculta2
-    float* d3 = d2 + n * oculta2;  // n × classes
+    float* w1 = compartilhada;                    // oculta1 × (entradas + 1)
+    float* w2 = w1 + oculta1 * (entradas + 1);    // oculta2 × (oculta1 + 1)
+    float* w3 = w2 + oculta2 * (oculta1 + 1);     // classes × (oculta2 + 1)
+    float* x = w3 + classes * (oculta2 + 1);      // n × entradas
+    float* a1 = x + n * entradas;                 // n × oculta1
+    float* a2 = a1 + n * oculta1;                 // n × oculta2
+    float* a3 = a2 + n * oculta2;                 // n × classes (escores)
+    float* d1 = a3 + n * classes;                 // n × oculta1
+    float* d2 = d1 + n * oculta1;                 // n × oculta2
+    float* d3 = d2 + n * oculta2;                 // n × classes
 
-    // A entrada do batch é lida da memória global uma vez e reaproveitada no
-    // forward e na atualização da primeira camada.
+    // Os pesos e a entrada do batch são lidos da memória global uma vez. A
+    // entrada é reaproveitada no forward e na atualização da primeira camada.
+    copiar_pesos(W1, w1, entradas, oculta1);
+    copiar_pesos(W2, w2, oculta1, oculta2);
+    copiar_pesos(W3, w3, oculta2, classes);
     for (int k = threadIdx.x; k < n * entradas; k += blockDim.x) {
         x[k] = entrada[k];
     }
     __syncthreads();
 
-    forward_camada(x, W1, b1, a1, n, entradas, oculta1, false);
+    forward_camada(x, w1, entradas + 1, b1, a1, n, entradas, oculta1, false);
     __syncthreads();
-    forward_camada(a1, W2, b2, a2, n, oculta1, oculta2, false);
+    forward_camada(a1, w2, oculta1 + 1, b2, a2, n, oculta1, oculta2, false);
     __syncthreads();
-    forward_camada(a2, W3, b3, a3, n, oculta2, classes, true);
+    forward_camada(a2, w3, oculta2 + 1, b3, a3, n, oculta2, classes, true);
     __syncthreads();
     perda_saida(a3, rotulos, d3, perda_amostra, n);
     __syncthreads();
 
     // Propaga o delta da última camada até a primeira, com os pesos ainda sem
     // a atualização deste batch.
-    propagar_delta(d3, W3, a2, d2, n, oculta2, classes);
+    propagar_delta(d3, w3, oculta2 + 1, a2, d2, n, oculta2, classes);
     __syncthreads();
-    propagar_delta(d2, W2, a1, d1, n, oculta1, oculta2);
+    propagar_delta(d2, w2, oculta1 + 1, a1, d1, n, oculta1, oculta2);
     __syncthreads();
 
     // Uma atualização por batch, com a média das correções das n amostras.
@@ -466,12 +489,15 @@ int main(int argc, char** argv) {
         const int N = static_cast<int>(treino.tamanho());
         const int max_batch = min(batch_size, N);
 
-        // Os vetores de um batch precisam caber na memória compartilhada de um bloco.
+        // A cópia dos pesos e os vetores de um batch precisam caber na memória
+        // compartilhada de um bloco.
+        const size_t bytes_pesos = Barenn::floats_pesos * sizeof(float);
         const size_t bytes_por_amostra = Barenn::floats_por_amostra * sizeof(float);
         int compartilhada_por_bloco = 0;
         CUDA_CHECK(cudaDeviceGetAttribute(&compartilhada_por_bloco,
                                           cudaDevAttrMaxSharedMemoryPerBlock, 0));
-        const int max_batch_gpu = static_cast<int>(compartilhada_por_bloco / bytes_por_amostra);
+        const int max_batch_gpu =
+            static_cast<int>((compartilhada_por_bloco - bytes_pesos) / bytes_por_amostra);
         if (max_batch > max_batch_gpu) {
             throw runtime_error("BATCH_SIZE deve ser <= " + to_string(max_batch_gpu) +
                                 " nesta GPU: o batch precisa caber na memória compartilhada de um bloco");
@@ -517,7 +543,8 @@ int main(int argc, char** argv) {
                 const float* x = imagens + size_t(inicio_batch) * Barenn::entradas;
 
                 // Um kernel de um bloco treina o batch inteiro.
-                Barenn::treinar_batch_kernel<<<1, Barenn::threads_por_bloco, n * bytes_por_amostra>>>(
+                Barenn::treinar_batch_kernel<<<1, Barenn::threads_por_bloco,
+                                               bytes_pesos + n * bytes_por_amostra>>>(
                     x, rotulos + inicio_batch, g1.W, g1.b, g2.W, g2.b, g3.W, g3.b,
                     perda_amostra + size_t(epoca) * N + inicio_batch, n, taxa, inv);
             }
