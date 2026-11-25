@@ -208,7 +208,7 @@ Porte para CUDA da versão com mini-batch: kernels de forward e backward, aloca�
 | [#13](https://github.com/thomaskmk/awful-barenn/issues/13) | `v3.1` | Dados, pesos e `grad_w` em vetores contíguos (CPU, 4 threads) | 0,124 s | 2,85× |
 | [#14](https://github.com/thomaskmk/awful-barenn/issues/14) | `v3.2` | Porte para CUDA: 9 kernels por batch, uma thread por elemento de saída | 0,217 s | 1,63× |
 
-Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar. Na `v3.1`, a mediana é a da comparação alternada com a `v2.2`; no job do slurm, foi 0,144 s (ver abaixo).
+Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar. Na `v3.1`, a mediana é a da comparação com a `v2.2` no mesmo nó (ver abaixo).
 
 **Vetores contíguos.** A saída é idêntica à da `v2.2` com 1, 4 e 8 threads, e à do código base com B = 1 ([log](logs/fase3/franky_check_v3.1.txt)). Com execuções alternadas no mesmo nó, a `v3.1` ficou mais rápida que a `v2.2` em todos os números de threads, e o ganho cresce com elas ([log](logs/fase3/franky_v3.1_vs_v2.2.txt)):
 
@@ -218,8 +218,6 @@ Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0
 | `v3.1` | 0,199 s | 0,155 s | 0,124 s | 0,159 s |
 
 A hipótese é o `Atualizar`: ele lê o acumulador de cada thread para cada peso, e com `vector<vector<float>>` cada leitura passava pelo ponteiro da linha no estado daquela thread. Esse custo cresce com o número de threads. A contagem de instruções no SD (callgrind) vai confirmar ou não.
-
-Com 4 threads, os tempos da `v3.1` se dividem em dois patamares, ≈ 0,124 s e ≈ 0,145 s, o que não acontece na `v2.2` (0,128 a 0,135 s). Na comparação alternada, 9 de 10 execuções ficaram no patamar rápido; no job do slurm, 7 de 10 ficaram no lento ([log](logs/fase3/franky_v3.1)). A causa ainda não está identificada: um efeito que muda de uma execução para outra costuma depender dos endereços em que os blocos de memória caem. Os contadores do perf no SD devem ajudar.
 
 **Porte para CUDA.** O treino roda em [barenn.cu](barenn.cu); o `barenn.cpp` continua como a versão de CPU. Por batch, são 9 kernels: o forward de cada camada (uma thread por neurônio de uma amostra), a perda e o delta da saída (uma thread por amostra), o delta das camadas 2 e 1 (uma thread por entrada de uma amostra) e a atualização de cada camada (uma thread por peso ou viés, somando as correções do batch). Leitura, inicialização dos pesos e avaliação ficam na CPU. As cópias levam ≈ 0,18 ms na ida e ≈ 0,15 ms na volta, fora do cronômetro ([log](logs/fase3/franky_v3.2)).
 
