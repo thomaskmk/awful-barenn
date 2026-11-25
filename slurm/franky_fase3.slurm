@@ -13,6 +13,8 @@
 #   nvcc -O3 barenn.cu -o barenn_gpu
 #   sbatch slurm/franky_fase3.slurm
 
+export BATCH_SIZE=32 TAXA=0.32   # configuração fixada na fase 2 (#7)
+
 nvidia-smi
 
 ./barenn_gpu

@@ -1,0 +1,46 @@
+# nsys profile -t cuda ./barenn_gpu (BATCH_SIZE=32 TAXA=0.32), Franky, RTX A1000, Nsight Systems 2025.3.1
+
+NOTICE: Existing SQLite export found: nsys_v3.2.sqlite
+        It is assumed file was previously exported from: nsys_v3.2.nsys-rep
+        Consider using --force-export=true if needed.
+
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)     Med (ns)    Min (ns)    Max (ns)   StdDev (ns)            Name         
+ --------  ---------------  ---------  -----------  -----------  ---------  ----------  ------------  ----------------------
+     76.5      238,206,003     55,080      4,324.7      2,961.0      1,134   2,490,712      11,943.9  cudaLaunchKernel      
+     21.9       68,171,258         18  3,787,292.1      1,109.0        688  68,149,208  16,062,616.7  cudaMalloc            
+      1.5        4,616,717          1  4,616,717.0  4,616,717.0  4,616,717   4,616,717           0.0  cudaDeviceSynchronize 
+      0.1          352,035         15     23,469.0      5,288.0      3,748     120,602      37,511.0  cudaMemcpy            
+      0.0           77,475         18      4,304.2      1,216.5        819      54,814      12,621.8  cudaFree              
+      0.0              550          1        550.0        550.0        550         550           0.0  cuModuleGetLoadingMode
+
+
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                                                  Name                                                
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  ----------------------------------------------------------------------------------------------------
+     60.0      123,732,251     18,360   6,739.2   4,704.0     1,856    14,079      4,824.4  Barenn::forward_kernel(const float *, const float *, const float *, float *, float *, int, int, int…
+     22.5       46,342,283     18,360   2,524.1   2,560.0     2,272     2,720        119.6  Barenn::atualizar_kernel(float *, float *, const float *, const float *, int, int, int, float, floa…
+     12.2       25,209,724     12,240   2,059.6   2,063.5     1,983     2,144         42.0  Barenn::delta_anterior_kernel(const float *, const float *, const float *, float *, int, int, int)  
+      5.3       10,939,866      6,120   1,787.6   1,792.0     1,759     2,048         15.1  Barenn::saida_kernel(const float *, const int *, float *, float *, int)                             
+
+
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+
+ Time (%)  Total Time (ns)  Count  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  --------  --------  --------  --------  -----------  ----------------------------
+     55.7           83,006      8  10,375.8     480.0       384    78,334     27,462.5  [CUDA memcpy Host-to-Device]
+     44.3           66,015      7   9,430.7     928.0       896    59,871     22,243.4  [CUDA memcpy Device-to-Host]
+
+
+ ** CUDA Kernel Launch & Exec Time Summary (cuda_kern_exec_sum):
+
+    PID        TID     DevId  Count   QCount   TAvg (ns)    TMed (ns)   TMin (ns)  TMax (ns)  TStdDev (ns)  AAvg (ns)  AMed (ns)  AMin (ns)  AMax (ns)  AStdDev (ns)   QAvg (ns)    QMed (ns)   QMin (ns)  QMax (ns)  QStdDev (ns)  KAvg (ns)  KMed (ns)  KMin (ns)  KMax (ns)  KStdDev (ns)      API Name                                                  Kernel Name                                             
+ ---------  ---------  -----  ------  ------  -----------  -----------  ---------  ---------  ------------  ---------  ---------  ---------  ---------  ------------  -----------  -----------  ---------  ---------  ------------  ---------  ---------  ---------  ---------  ------------  ----------------  ----------------------------------------------------------------------------------------------------
+ 1,358,285  1,358,285      0   6,120   6,120  4,549,395.4  4,631,792.0     20,945  4,634,888     464,713.7    3,575.6    3,255.0      1,162  2,490,712      31,801.1  4,544,032.2  4,626,728.0     17,370  4,629,719     465,404.7    1,787.6    1,792.0      1,759      2,048          15.1  cudaLaunchKernel  Barenn::saida_kernel(const float *, const int *, float *, float *, int)                             
+ 1,358,285  1,358,285      0  18,360  18,359  4,548,819.2  4,631,457.0     19,377  4,635,339     465,209.2    2,744.3    2,801.0      1,135    130,268       1,105.7  4,539,582.9  4,624,549.0     12,105  4,630,263     463,801.6    6,739.2    4,704.0      1,856     14,079       4,824.4  cudaLaunchKernel  Barenn::forward_kernel(const float *, const float *, const float *, float *, float *, int, int, int…
+ 1,358,285  1,358,285      0  12,240  12,240  4,548,381.3  4,631,063.0     21,864  4,634,323     465,210.1    8,406.4    3,486.0      1,143    997,788      10,481.8  4,537,915.3  4,616,582.5     18,348  4,628,963     464,063.8    2,059.6    2,063.5      1,983      2,144          42.0  cudaLaunchKernel  Barenn::delta_anterior_kernel(const float *, const float *, const float *, float *, int, int, int)  
+ 1,358,285  1,358,285      0  18,360  18,360  4,536,399.7  4,618,388.0     24,799  4,622,811     462,462.8    3,433.7    2,780.0      1,134     27,646       1,367.4  4,530,441.9  4,612,379.0     20,899  4,616,048     462,078.7    2,524.1    2,560.0      2,272      2,720         119.6  cudaLaunchKernel  Barenn::atualizar_kernel(float *, float *, const float *, const float *, int, int, int, float, floa…
+

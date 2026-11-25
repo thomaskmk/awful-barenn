@@ -9,6 +9,8 @@
 
 # Submeta da raiz do repositório: sbatch slurm/sd_fase3.slurm
 
+export BATCH_SIZE=32 TAXA=0.32   # configuração fixada na fase 2 (#7)
+
 module load gcc/13.2_sequana cuda/12.6_sequana
 nvidia-smi
 nvcc --version | tail -1
