@@ -27,13 +27,14 @@ constexpr int classes = 10;
 // o próprio Estado de cada camada.
 struct alignas(64) Estado {
     // Dados do último forward usados para calcular os gradientes.
-    const vector<float>* last_input = nullptr; // aponta para a entrada, sem copiar
+    const float* last_input = nullptr; // aponta para a entrada, sem copiar
     vector<float> last_z;
     vector<float> out;
     vector<float> delta;
     vector<float> grad_in;
-    // Acumuladores do mini-batch: correções já com o sinal e a taxa.
-    vector<vector<float>> grad_w;
+    // Acumuladores do mini-batch: correções já com o sinal e a taxa,
+    // no mesmo layout dos pesos.
+    vector<float> grad_w;
     vector<float> grad_b;
 };
 
@@ -42,21 +43,21 @@ class DenseLayer {
     int out_features;
     bool inicial;
     bool final;
-    // weights[i][j] liga a entrada j ao neurônio de saída i.
-    vector<vector<float>> weights;
+    // Matriz em um único bloco, linha por linha: weights[i * in_features + j]
+    // liga a entrada j ao neurônio de saída i.
+    vector<float> weights;
     vector<float> bias;
 
 public:
     DenseLayer(int input_size, int output_size, bool is_inicial = false, bool is_final = false)
         : in_features(input_size), out_features(output_size), inicial(is_inicial), final(is_final),
-          weights(output_size, vector<float>(input_size)), bias(output_size, 0) {
+          weights(output_size * input_size), bias(output_size, 0) {
         // A semente fixa torna a inicialização de cada camada reproduzível.
+        // A ordem de sorteio é a mesma de antes: linha por linha.
         mt19937 gen(1337);
         uniform_real_distribution<float> distribution(-0.05f, 0.05f);
-        for (auto& row : weights) {
-            for (float& weight : row) {
-                weight = distribution(gen);
-            }
+        for (float& weight : weights) {
+            weight = distribution(gen);
         }
     }
 
@@ -67,31 +68,34 @@ public:
         e.out.resize(out_features);
         e.delta.resize(out_features);
         e.grad_in.resize(in_features);
-        e.grad_w.assign(out_features, vector<float>(in_features, 0.0f));
+        e.grad_w.assign(out_features * in_features, 0.0f);
         e.grad_b.assign(out_features, 0.0f);
         return e;
     }
 
     // const: o forward só lê os parâmetros e escreve no Estado.
-    const vector<float>& Forward(const vector<float>& input, Estado& e) const {
-        e.last_input = &input;
+    // input aponta para in_features valores; o retorno, para out_features.
+    const float* Forward(const float* input, Estado& e) const {
+        e.last_input = input;
         // Cada neurônio soma o viés aos produtos entre entradas e pesos.
         for (int i = 0; i < out_features; ++i) {
+            const float* w = weights.data() + i * in_features; // linha i
             float sum = bias[i];
             // Laço escalar de propósito: o #pragma omp simd reduction gerou mais
             // instruções e deixou o forward mais lento (ver issue #8).
             for (int j = 0; j < in_features; ++j) {
-                sum += input[j] * weights[i][j];
+                sum += input[j] * w[j];
             }
             e.last_z[i] = sum;
             // As camadas ocultas usam ReLU. A última devolve escores lineares.
             e.out[i] = final ? sum : max(0.0f, sum);
         }
-        return e.out;
+        return e.out.data();
     }
 
     // const: o backward só acumula correções no Estado; os pesos mudam no Atualizar.
-    const vector<float>& Backward(const vector<float>& grad_out, float learning_rate, Estado& e) const {
+    // grad_out aponta para out_features valores; o retorno, para in_features.
+    const float* Backward(const float* grad_out, float learning_rate, Estado& e) const {
         // Delta é o gradiente da perda em relação à soma antes da ativação.
         // Na ReLU, o gradiente passa apenas quando essa soma é positiva.
         for (int i = 0; i < out_features; ++i) {
@@ -101,28 +105,31 @@ public:
 
         // O gradiente do peso é delta vezes a entrada; o do viés é o próprio delta.
         // A camada de entrada não calcula grad_in: ninguém o recebe.
-        const vector<float>& x = *e.last_input;
+        const float* x = e.last_input;
         if (!inicial) {
             fill(e.grad_in.begin(), e.grad_in.end(), 0.0f);
             for (int i = 0; i < out_features; ++i) {
                 const float d = e.delta[i];
+                const float* w = weights.data() + i * in_features; // linha i
+                float* gw = e.grad_w.data() + i * in_features;
                 for (int j = 0; j < in_features; ++j) {
-                    e.grad_in[j] += d * weights[i][j];
-                    e.grad_w[i][j] -= learning_rate * (d * x[j]);
+                    e.grad_in[j] += d * w[j];
+                    gw[j] -= learning_rate * (d * x[j]);
                 }
                 e.grad_b[i] -= learning_rate * d;
             }
         } else {
             for (int i = 0; i < out_features; ++i) {
                 const float d = e.delta[i];
+                float* gw = e.grad_w.data() + i * in_features;
                 for (int j = 0; j < in_features; ++j) {
-                    e.grad_w[i][j] -= learning_rate * (d * x[j]);
+                    gw[j] -= learning_rate * (d * x[j]);
                 }
                 e.grad_b[i] -= learning_rate * d;
             }
         }
 
-        return e.grad_in;
+        return e.grad_in.data();
     }
 
     // Soma as correções acumuladas por todas as threads, em ordem fixa de thread
@@ -132,13 +139,14 @@ public:
         const float inv = 1.0f / n;
         for (int i = 0; i < out_features; ++i) {
             for (int j = 0; j < in_features; ++j) {
-                float soma = estados[0].grad_w[i][j];
-                estados[0].grad_w[i][j] = 0.0f;
+                const int k = i * in_features + j;
+                float soma = estados[0].grad_w[k];
+                estados[0].grad_w[k] = 0.0f;
                 for (size_t t = 1; t < estados.size(); ++t) {
-                    soma += estados[t].grad_w[i][j];
-                    estados[t].grad_w[i][j] = 0.0f;
+                    soma += estados[t].grad_w[k];
+                    estados[t].grad_w[k] = 0.0f;
                 }
-                weights[i][j] += soma * inv;
+                weights[k] += soma * inv;
             }
             float soma_b = estados[0].grad_b[i];
             estados[0].grad_b[i] = 0.0f;
@@ -151,26 +159,31 @@ public:
     }
 };
 
-struct Amostra {
-    vector<float> imagem;
-    int rotulo;
+// Conjunto de imagens em um único bloco de memória: a imagem s ocupa as
+// posições [s * entradas, (s + 1) * entradas) de imagens.
+struct Dados {
+    vector<float> imagens;
+    vector<int> rotulos;
+
+    size_t tamanho() const { return rotulos.size(); }
+    const float* imagem(size_t s) const { return imagens.data() + s * entradas; }
 };
 
-vector<Amostra> ler_dados(const string& caminho) {
+Dados ler_dados(const string& caminho) {
     ifstream arquivo(caminho);
     if (!arquivo) {
         throw runtime_error("Não foi possível abrir " + caminho);
     }
 
-    vector<Amostra> dados;
+    Dados dados;
     string linha;
     size_t numero_linha = 0;
     while (getline(arquivo, linha)) {
         ++numero_linha;
         istringstream campos(linha);
-        Amostra amostra{};
         // Cada atributo deve ser seguido por vírgula, inclusive o último.
-        for (int i = 0; i < entradas; ++i) {
+        int lidos = 0;
+        for (; lidos < entradas; ++lidos) {
             float valor;
             char separador;
             if (!(campos >> valor >> separador) || separador != ',' ||
@@ -178,19 +191,20 @@ vector<Amostra> ler_dados(const string& caminho) {
                 break;
             }
             // Converte os valores de [0, 16] para [0, 1].
-            amostra.imagem.push_back(valor / 16.0f);
+            dados.imagens.push_back(valor / 16.0f);
         }
         // Depois dos atributos, deve restar apenas o rótulo de 0 a 9.
-        if (amostra.imagem.size() != entradas ||
-            !(campos >> amostra.rotulo) ||
-            amostra.rotulo < 0 || amostra.rotulo >= classes ||
+        int rotulo;
+        if (lidos != entradas ||
+            !(campos >> rotulo) ||
+            rotulo < 0 || rotulo >= classes ||
             !(campos >> ws).eof()) {
             throw runtime_error(caminho + ":" + to_string(numero_linha) +
                 " — esperados 64 atributos de 0 a 16 e um rótulo inteiro de 0 a 9");
         }
-        dados.push_back(std::move(amostra));
+        dados.rotulos.push_back(rotulo);
     }
-    if (arquivo.bad() || dados.empty()) {
+    if (arquivo.bad() || dados.tamanho() == 0) {
         throw runtime_error("Falha de leitura ou arquivo vazio: " + caminho);
     }
     return dados;
@@ -198,21 +212,20 @@ vector<Amostra> ler_dados(const string& caminho) {
 
 // Calcula metade da soma dos erros quadráticos. O alvo vale 1 para a
 // classe correta e 0 para as demais. O erro também é a derivada por escore.
-float perda(const vector<float>& escores, int rotulo,
-            vector<float>* gradiente = nullptr) {
+float perda(const float* escores, int rotulo, float* gradiente = nullptr) {
     float total = 0;
     for (int i = 0; i < classes; ++i) {
         float erro = escores[i] - (i == rotulo ? 1.0f : 0.0f);
         total += 0.5f * erro * erro;
         if (gradiente) {
-            (*gradiente)[i] = erro;
+            gradiente[i] = erro;
         }
     }
     return total;
 }
 
 void avaliar(const DenseLayer& l1, const DenseLayer& l2, const DenseLayer& l3,
-             const vector<Amostra>& teste) {
+             const Dados& teste) {
     // Só forward: um Estado por camada, sem uso dos acumuladores.
     Estado e1 = l1.NovoEstado();
     Estado e2 = l2.NovoEstado();
@@ -235,16 +248,15 @@ void avaliar(const DenseLayer& l1, const DenseLayer& l2, const DenseLayer& l3,
     double perda_total = 0;
 
     // Só fazemos forward aqui. Os pesos ficam fixos.
-    for (size_t i = 0; i < teste.size(); ++i) {
-        const auto& amostra = teste[i];
-        const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1), e2), e3);
+    for (size_t i = 0; i < teste.tamanho(); ++i) {
+        const int rotulo = teste.rotulos[i];
+        const float* escores = l3.Forward(l2.Forward(l1.Forward(teste.imagem(i), e1), e2), e3);
         // O índice do maior escore indica a classe prevista.
-        int previsto = static_cast<int>(
-            max_element(escores.begin(), escores.end()) - escores.begin());
-        bool acertou = previsto == amostra.rotulo;
+        int previsto = static_cast<int>(max_element(escores, escores + classes) - escores);
+        bool acertou = previsto == rotulo;
         acertos += acertou;
-        ++confusoes[amostra.rotulo][previsto];
-        perda_total += perda(escores, amostra.rotulo);
+        ++confusoes[rotulo][previsto];
+        perda_total += perda(escores, rotulo);
 
         // Guarda até três acertos e três erros para ilustrar a saída.
         // A acurácia usa todas as imagens, inclusive as não exibidas.
@@ -256,16 +268,16 @@ void avaliar(const DenseLayer& l1, const DenseLayer& l2, const DenseLayer& l3,
                     segundo = classe;
                 }
             }
-            exemplos.push_back({i + 1, amostra.rotulo, previsto, segundo,
+            exemplos.push_back({i + 1, rotulo, previsto, segundo,
                                 escores[previsto], escores[segundo]});
             ++exemplos_tipo;
         }
     }
 
     cout << "\nAVALIACAO FINAL\n"
-         << "Acuracia " << setprecision(1) << 100.0 * acertos / teste.size()
-         << "% | " << acertos << " acertos em " << teste.size() << " imagens\n"
-         << "Perda media " << setprecision(4) << perda_total / teste.size() << "\n";
+         << "Acuracia " << setprecision(1) << 100.0 * acertos / teste.tamanho()
+         << "% | " << acertos << " acertos em " << teste.tamanho() << " imagens\n"
+         << "Perda media " << setprecision(4) << perda_total / teste.tamanho() << "\n";
 
     cout << "\nALGUMAS INFERENCIAS\n";
     cout << "Esperado  Previsto\n";
@@ -375,9 +387,9 @@ int main(int argc, char** argv) {
         for (int epoca = 0; epoca < epocas; ++epoca) {
             double perda_total = 0;
             // Uma época percorre todo o conjunto na ordem do arquivo.
-            for (size_t inicio_batch = 0; inicio_batch < treino.size(); inicio_batch += batch_size) {
+            for (size_t inicio_batch = 0; inicio_batch < treino.tamanho(); inicio_batch += batch_size) {
                 // O último batch pode ser menor que batch_size.
-                size_t fim_batch = min(inicio_batch + batch_size, treino.size());
+                size_t fim_batch = min(inicio_batch + batch_size, treino.tamanho());
 
                 // As amostras do batch são independentes: cada thread processa
                 // as suas com o próprio estado. static: trabalho igual por amostra
@@ -385,14 +397,13 @@ int main(int argc, char** argv) {
                 #pragma omp parallel for schedule(static) reduction(+:perda_total)
                 for (size_t s = inicio_batch; s < fim_batch; ++s) {
                     const int t = omp_get_thread_num();
-                    const auto& amostra = treino[s];
-                    const auto& escores = l3.Forward(l2.Forward(l1.Forward(amostra.imagem, e1[t]), e2[t]), e3[t]);
-                    perda_total += Barenn::perda(escores, amostra.rotulo, &gradientes[t]);
+                    const float* escores = l3.Forward(l2.Forward(l1.Forward(treino.imagem(s), e1[t]), e2[t]), e3[t]);
+                    perda_total += Barenn::perda(escores, treino.rotulos[s], gradientes[t].data());
 
                     // Propaga o gradiente da última camada até a primeira.
                     // Cada Backward acumula as correções no estado da thread, sem alterar os pesos.
-                    const auto& grad3 = l3.Backward(gradientes[t], taxa, e3[t]);
-                    const auto& grad2 = l2.Backward(grad3, taxa, e2[t]);
+                    const float* grad3 = l3.Backward(gradientes[t].data(), taxa, e3[t]);
+                    const float* grad2 = l2.Backward(grad3, taxa, e2[t]);
                     l1.Backward(grad2, taxa, e1[t]);
                 }
 
@@ -402,14 +413,14 @@ int main(int argc, char** argv) {
                 l2.Atualizar(e2, n);
                 l3.Atualizar(e3, n);
             }
-            perdas[epoca] = perda_total / treino.size();
+            perdas[epoca] = perda_total / treino.tamanho();
         }
 
         const chrono::duration<double> tempo = chrono::steady_clock::now() - inicio;
 
         // Imprime as métricas e roda a avaliação após encerrar o cronômetro.
         cout << fixed << setprecision(4)
-             << "TREINO | " << treino.size() << " imagens\n";
+             << "TREINO | " << treino.tamanho() << " imagens\n";
         for (int epoca = 0; epoca < epocas; epoca += 5) {
             cout << "Epoca " << setw(2) << epoca + 1 << "/" << epocas
                  << " | perda media " << perdas[epoca] << "\n";
