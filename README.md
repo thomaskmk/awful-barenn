@@ -240,7 +240,7 @@ A fase 4 ataca esses três pontos: menos kernels por batch (fusão), dados reapr
 
 ### 3.4 Otimização em GPU
 
-Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, streams), guiadas por Nsight Systems e Nsight Compute.
+Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, streams), guiadas pelo Nsight Systems.
 
 | Issue | Tag | Intervenção | Tempo de treino | Speedup |
 |---|---|---|---|---|
@@ -263,7 +263,7 @@ A correção foi copiar os pesos para a memória compartilhada no início de cad
 
 Com isso, a GPU passa a CPU pela primeira vez: 0,116 s, contra 0,124 s da `v3.1` com 4 threads ([relatório](logs/fase4/nsys_v4.1.txt)).
 
-**Ocupação teórica.** Pela compilação de diagnóstico para a RTX A1000 (`--resource-usage`), o kernel usa 42 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. O bloco de 1.024 threads ocupa 32 dos 48 warps de um SM (67%), mas é o único bloco: 1 dos 18 SMs da GPU trabalha. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
+**Recursos do kernel.** Pela compilação de diagnóstico para a RTX A1000 (`--resource-usage`), o kernel usa 42 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. Como o kernel tem um único bloco, só 1 dos 18 SMs da GPU trabalha. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
 
 **Treino em um kernel.** O laço de épocas e de batches entra no kernel, e os pesos e os vieses ficam na memória compartilhada do começo ao fim: são lidos da memória global uma vez, no início, e gravados de volta uma vez, no fim. Entre um batch e o seguinte, uma barreira substitui o lançamento, e os 6.120 lançamentos viram 1. A saída é idêntica à da `v4.1` ([log](logs/fase4/franky_check_v4.2.txt)).
 
@@ -279,7 +279,6 @@ O ganho, ≈ 2 µs por batch, é o lançamento e a cópia dos pesos que cada bat
 
 | Threads por bloco | 256 | 512 | 1.024 |
 |---|---|---|---|
-| Warps no SM (ocupação teórica) | 8 (17%) | 16 (33%) | 32 (67%) |
 | Tempo de treino | 0,107 s | 0,101 s | **0,1005 s** |
 
 Com menos threads, cada uma processa mais elementos em sequência em cada etapa, e sobram menos warps para o SM alternar enquanto outros esperam uma leitura. As barreiras ficam mais baratas, mas não compensam. O padrão é 1.024 threads. O kernel usa 56 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.2.txt)), e ≈ 34 KB de memória compartilhada com B = 32; o limite de batch continua em 52.
