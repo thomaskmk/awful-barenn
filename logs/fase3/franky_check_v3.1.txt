@@ -1,0 +1,16 @@
+== B=1, 1 thread, contra o código base
+Referência: /home/thomaskmk/scratch/aps2/bin/franky_v0-baseline
+Candidato:  /home/thomaskmk/scratch/aps2-v3.1/barenn
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 1 threads, contra a v2.2
+Referência: /home/thomaskmk/scratch/aps2/bin/franky_v2.2
+Candidato:  /home/thomaskmk/scratch/aps2-v3.1/barenn
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 4 threads, contra a v2.2
+Referência: /home/thomaskmk/scratch/aps2/bin/franky_v2.2
+Candidato:  /home/thomaskmk/scratch/aps2-v3.1/barenn
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 8 threads, contra a v2.2
+Referência: /home/thomaskmk/scratch/aps2/bin/franky_v2.2
+Candidato:  /home/thomaskmk/scratch/aps2-v3.1/barenn
+OK: saída idêntica à referência (exceto o tempo).
