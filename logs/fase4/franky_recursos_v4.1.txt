@@ -1,0 +1,4 @@
+# nvcc -O3 -arch=sm_86 --resource-usage (compilação de diagnóstico; o binário medido usa a arquitetura padrão e é compilado para sm_86 na carga)
+ptxas info    : Compiling entry function '_ZN6Barenn20treinar_batch_kernelEPKfPKiPfS4_S4_S4_S4_S4_S4_iff' for 'sm_86'
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 42 registers, used 1 barriers, 436 bytes cmem[0]

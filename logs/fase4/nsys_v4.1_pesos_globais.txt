@@ -1,0 +1,35 @@
+# nsys profile -t cuda ./barenn_gpu (BATCH_SIZE=32 TAXA=0.32), Franky, RTX A1000, Nsight Systems 2025.3.1
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls    Avg (ns)      Med (ns)     Min (ns)    Max (ns)   StdDev (ns)            Name         
+ --------  ---------------  ---------  ------------  ------------  ----------  ----------  ------------  ----------------------
+     70.4      295,128,312      6,120      48,223.6      50,873.0       1,355   2,860,185      42,621.0  cudaLaunchKernel      
+     17.1       71,886,180          9   7,987,353.3       1,956.0       1,183  71,869,559  23,955,827.1  cudaMalloc            
+     12.4       51,843,361          1  51,843,361.0  51,843,361.0  51,843,361  51,843,361           0.0  cudaDeviceSynchronize 
+      0.1          357,112         15      23,807.5       5,206.0       3,694     121,463      37,785.5  cudaMemcpy            
+      0.0           76,644          9       8,516.0       1,879.0       1,224      60,936      19,670.4  cudaFree              
+      0.0              755          1         755.0         755.0         755         755           0.0  cuModuleGetLoadingMode
+
+
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                                                  Name                                                
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  ----------------------------------------------------------------------------------------------------
+    100.0      343,728,935      6,120  56,164.9  50,367.0    25,279    66,174      7,765.0  Barenn::treinar_batch_kernel(const float *, const int *, float *, float *, float *, float *, float …
+
+
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+
+ Time (%)  Total Time (ns)  Count  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  --------  --------  --------  --------  -----------  ----------------------------
+     55.8           83,007      8  10,375.9     464.0       384    78,431     27,501.8  [CUDA memcpy Host-to-Device]
+     44.2           65,758      7   9,394.0   1,024.0       768    59,870     22,259.1  [CUDA memcpy Device-to-Host]
+
+
+ ** CUDA Kernel Launch & Exec Time Summary (cuda_kern_exec_sum):
+
+   PID      TID    DevId  Count  QCount   TAvg (ns)     TMed (ns)    TMin (ns)  TMax (ns)   TStdDev (ns)  AAvg (ns)  AMed (ns)  AMin (ns)  AMax (ns)  AStdDev (ns)   QAvg (ns)     QMed (ns)    QMin (ns)  QMax (ns)   QStdDev (ns)  KAvg (ns)  KMed (ns)  KMin (ns)  KMax (ns)  KStdDev (ns)      API Name                                                  Kernel Name                                             
+ -------  -------  -----  -----  ------  ------------  ------------  ---------  ----------  ------------  ---------  ---------  ---------  ---------  ------------  ------------  ------------  ---------  ----------  ------------  ---------  ---------  ---------  ---------  ------------  ----------------  ----------------------------------------------------------------------------------------------------
+ 689,180  689,180      0  6,120   6,120  53,648,082.0  51,916,108.5     80,376  67,376,139  13,662,903.1   48,223.6   50,873.0      1,355  2,860,185      42,621.0  53,543,693.6  51,814,983.0        961  67,245,115  13,646,332.2   56,164.9   50,367.0     25,279     66,174       7,765.0  cudaLaunchKernel  Barenn::treinar_batch_kernel(const float *, const int *, float *, float *, float *, float *, float …
+
