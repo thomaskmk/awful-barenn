@@ -32,13 +32,13 @@ O objetivo é reduzir o tempo de treino sem corromper o resultado: primeiro otim
 | | Santos Dumont (LNCC) | Franky (Insper) |
 |---|---|---|
 | CPU | 2 × Intel Xeon Gold 6252 @ 2,10 GHz (Cascade Lake, 24 núcleos cada, sem hyperthreading) | Intel Core i7-13700T (8 núcleos P até 4,8 GHz e 8 núcleos E); cada job recebe 8 núcleos P, uma thread por núcleo |
-| GPU | _a registrar_ | NVIDIA RTX A1000 (8 GB, *compute capability* 8.6) |
+| GPU | NVIDIA Tesla V100-SXM2 (32 GB, *compute capability* 7.0, 80 SMs) | NVIDIA RTX A1000 (8 GB, *compute capability* 8.6, 18 SMs) |
 | Filas | `sequana_cpu_dev`, `sequana_gpu_dev` | `sunny_cpu`, `sunny_gpu` |
 | Compilador | gcc 13.2 (`module load gcc/13.2_sequana`) | gcc 14.2 (padrão do cluster) |
 | CUDA | 12.6 (`module load cuda/12.6_sequana`) | 12.8.1 (`module load cuda/12.8.1`) |
-| Profilers | valgrind 3.19 (callgrind), perf | Nsight Systems 2025.3 (GPU); nenhum de CPU (sem valgrind e perf nos nós) |
+| Profilers | valgrind 3.19 (callgrind), perf; Nsight Systems 2024.5 (GPU) | Nsight Systems 2025.3 (GPU); nenhum de CPU (sem valgrind e perf nos nós) |
 
-Todas as medições e evidências deste relatório vêm desses dois clusters. Hardware e compilador diferem entre eles, então a comparação entre os clusters é pelo speedup sobre o código base de cada um. O ambiente do Franky está registrado em [logs/base/franky_ambiente.txt](logs/base/franky_ambiente.txt).
+Todas as medições e evidências deste relatório vêm desses dois clusters. Hardware e compilador diferem entre eles, então a comparação entre os clusters é pelo speedup sobre o código base de cada um. O ambiente do Franky está registrado em [logs/base/franky_ambiente.txt](logs/base/franky_ambiente.txt), e o da GPU do SD, em [logs/base/sd_ambiente_gpu.txt](logs/base/sd_ambiente_gpu.txt).
 
 No Franky, o Nsight Systems só está instalado no nó de login. Para medir no nó de GPU, a parte de coleta (`target-linux-x64`) foi copiada para o scratch, que os nós compartilham, com o `bin/nsys` apontando para ela; a conversão do arquivo coletado e os relatórios (`nsys stats`) rodam no login.
 
@@ -203,85 +203,100 @@ No Franky, cada job tem 8 núcleos, e a curva tem o mesmo formato: o melhor pont
 
 Porte para CUDA da versão com mini-batch: kernels de forward e backward, alocação e cópias entre CPU e GPU. Os dados e os pesos vão para a GPU uma vez, antes do treino, e voltam uma vez, depois; as cópias ficam fora do cronômetro. Antes do porte, os dados e os pesos passam para vetores contíguos, que podem ser copiados de uma vez.
 
-| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+| Issue | Tag | Intervenção | SD | Franky |
 |---|---|---|---|---|
-| [#13](https://github.com/thomaskmk/awful-barenn/issues/13) | `v3.1` | Dados, pesos e `grad_w` em vetores contíguos (CPU, 4 threads) | 0,124 s | 2,85× |
-| [#14](https://github.com/thomaskmk/awful-barenn/issues/14) | `v3.2` | Porte para CUDA: 9 kernels por batch, uma thread por elemento de saída | 0,217 s | 1,63× |
+| [#13](https://github.com/thomaskmk/awful-barenn/issues/13) | `v3.1` | Dados, pesos e `grad_w` em vetores contíguos (CPU, 4 threads) | 0,260 s (3,77×) | 0,124 s (2,85×) |
+| [#14](https://github.com/thomaskmk/awful-barenn/issues/14) | `v3.2` | Porte para CUDA: 9 kernels por batch, uma thread por elemento de saída | 0,233 s (4,21×) | 0,217 s (1,63×) |
 
-Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar. Na `v3.1`, a mediana é a da comparação com a `v2.2` no mesmo nó (ver abaixo).
+Tempo de treino: mediana de 10. Entre parênteses, o speedup sobre o código base do mesmo cluster (SD: 0,981 s; Franky: 0,354 s). No Franky, a mediana da `v3.1` é a da comparação com a `v2.2` no mesmo nó.
 
-**Vetores contíguos.** A saída é idêntica à da `v2.2` com 1, 4 e 8 threads, e à do código base com B = 1 ([log](logs/fase3/franky_check_v3.1.txt)). Com execuções alternadas no mesmo nó, a `v3.1` ficou mais rápida que a `v2.2` em todos os números de threads, e o ganho cresce com elas ([log](logs/fase3/franky_v3.1_vs_v2.2.txt)):
+**Vetores contíguos.** A saída é idêntica à da `v2.2` (com 1, 4 e 16 threads no SD; 1, 4 e 8 no Franky) e à do código base com B = 1 ([SD](logs/fase3/check_v3.1.txt), [Franky](logs/fase3/franky_check_v3.1.txt)). A `v3.1` é mais rápida que a `v2.2` com qualquer número de threads, e o ganho cresce com elas ([SD](logs/fase3/sd_v3.1), [Franky](logs/fase3/franky_v3.1_vs_v2.2.txt)):
 
-| Threads | 1 | 2 | 4 | 8 |
+| Threads | 1 | 2 | 4 | 8 | 16 | 32 | 48 |
+|---|---|---|---|---|---|---|---|
+| SD, `v2.2` | 0,619 s | 0,381 s | 0,275 s | 0,393 s | 2,53 s | 17,4 s | 26,6 s |
+| SD, `v3.1` | 0,599 s | 0,364 s | **0,260 s** | 0,323 s | 1,54 s | 4,17 s | 7,45 s |
+| Franky, `v2.2` | 0,204 s | 0,167 s | 0,133 s | 0,179 s | — | — | — |
+| Franky, `v3.1` | 0,199 s | 0,155 s | **0,124 s** | 0,159 s | — | — | — |
+
+A hipótese da issue era um ganho no `Atualizar`, com menos instruções para chegar ao acumulador de cada thread. O callgrind no SD a refuta: o total de instruções cai só 0,3%, e tanto a região paralela quanto o `main`, onde o compilador embute o `Atualizar`, ficam praticamente iguais ([callgrind](logs/fase3/callgrind.out_v3.1)). O que muda é o acesso à memória ([perf stat](logs/fase3/perf-stat_v3.1_t1.txt)):
+
+| | `v2.2`, 1 thread | `v3.1`, 1 thread | `v2.2`, 4 threads | `v3.1`, 4 threads |
 |---|---|---|---|---|
-| `v2.2` | 0,204 s | 0,167 s | 0,133 s | 0,179 s |
-| `v3.1` | 0,199 s | 0,155 s | 0,124 s | 0,159 s |
+| Instruções | 4,89 × 10⁹ | 4,87 × 10⁹ | 5,59 × 10⁹ | 5,46 × 10⁹ |
+| Ciclos | 2,44 × 10⁹ | 2,37 × 10⁹ | 4,06 × 10⁹ | 3,78 × 10⁹ |
+| Falhas no L1 | 30,8 × 10⁶ | **3,7 × 10⁶** | 49,0 × 10⁶ | **31,5 × 10⁶** |
 
-A hipótese é o `Atualizar`: ele lê o acumulador de cada thread para cada peso, e com `vector<vector<float>>` cada leitura passava pelo ponteiro da linha no estado daquela thread. Esse custo cresce com o número de threads. A contagem de instruções no SD (callgrind) vai confirmar ou não.
+Com 1 thread, as falhas no L1 caem 88%. Na `v2.2`, cada imagem, cada linha da matriz de pesos e cada linha dos acumuladores era um bloco alocado à parte, com o cabeçalho do `malloc` entre eles; em blocos contínuos, os mesmos dados ocupam menos linhas de cache e são percorridos em sequência. O ganho de tempo cresce com o número de threads (com 32, de 17,4 para 4,2 s), mas a curva mantém o formato, e 4 threads continuam sendo o melhor ponto.
 
-**Porte para CUDA.** O treino roda em [barenn.cu](barenn.cu); o `barenn.cpp` continua como a versão de CPU. Por batch, são 9 kernels: o forward de cada camada (uma thread por neurônio de uma amostra), a perda e o delta da saída (uma thread por amostra), o delta das camadas 2 e 1 (uma thread por entrada de uma amostra) e a atualização de cada camada (uma thread por peso ou viés, somando as correções do batch). Leitura, inicialização dos pesos e avaliação ficam na CPU. As cópias levam ≈ 0,18 ms na ida e ≈ 0,15 ms na volta, fora do cronômetro ([log](logs/fase3/franky_v3.2)).
+**Porte para CUDA.** O treino roda em [barenn.cu](barenn.cu); o `barenn.cpp` continua como a versão de CPU. Por batch, são 9 kernels: o forward de cada camada (uma thread por neurônio de uma amostra), a perda e o delta da saída (uma thread por amostra), o delta das camadas 2 e 1 (uma thread por entrada de uma amostra) e a atualização de cada camada (uma thread por peso ou viés, somando as correções do batch). Leitura, inicialização dos pesos e avaliação ficam na CPU. As cópias levam ≈ 0,4 ms em cada sentido no SD e ≈ 0,2 ms no Franky, fora do cronômetro ([SD](logs/fase3/sd_v3.2), [Franky](logs/fase3/franky_v3.2)).
 
-Cada soma segue a ordem do `barenn.cpp`. A saída fica dentro da tolerância contra a `v2.1` (96,7% de acurácia, 1.737 acertos contra 1.738), e a diferença vem da contração em FMA feita pelo `nvcc` ([log](logs/fase3/franky_check_v3.2.txt)). A perda de cada amostra volta junto com os pesos e é somada na CPU, na ordem do arquivo. A issue previa `atomicAdd` em `double`, que não existe na arquitetura padrão do `nvcc` e somaria em ordem variável.
+Cada soma segue a ordem do `barenn.cpp`. A saída fica dentro da tolerância contra a `v2.1` nos dois clusters (96,7% de acurácia, 1.737 acertos contra 1.738), e a diferença vem da contração em FMA feita pelo `nvcc` ([SD](logs/fase3/check_v3.2.txt), [Franky](logs/fase3/franky_check_v3.2.txt)). A perda de cada amostra volta junto com os pesos e é somada na CPU, na ordem do arquivo. A issue previa `atomicAdd` em `double`, que não existe na arquitetura padrão do `nvcc` e somaria em ordem variável.
 
-O porte é **mais lento** que a CPU: 0,217 s, contra 0,199 s da `v2.1` e 0,133 s da `v2.2` com 4 threads. O Nsight Systems mostra por quê ([relatório](logs/fase3/nsys_v3.2.txt)):
+No Franky, o porte é **mais lento** que a CPU: 0,217 s, contra 0,199 s da `v2.1` e 0,133 s da `v2.2` com 4 threads. No SD, é um pouco mais rápido (0,233 s, contra 0,575 s da `v2.1` e 0,275 s da `v2.2`), porque a CPU do SD é mais lenta. O Nsight Systems mostra o mesmo perfil nos dois clusters ([SD](logs/fase3/sd_nsys_v3.2.txt), [Franky](logs/fase3/nsys_v3.2.txt)):
 
-| Kernel | Lançamentos | Tempo médio | % do tempo de GPU |
+| Kernel | Lançamentos | Tempo médio no SD (V100) | Tempo médio no Franky (A1000) |
 |---|---|---|---|
-| `forward_kernel` | 18.360 | 6,7 µs | 60,0% |
-| `atualizar_kernel` | 18.360 | 2,5 µs | 22,5% |
-| `delta_anterior_kernel` | 12.240 | 2,1 µs | 12,2% |
-| `saida_kernel` | 6.120 | 1,8 µs | 5,3% |
+| `forward_kernel` | 18.360 | 7,3 µs (58% da GPU) | 6,7 µs (60% da GPU) |
+| `atualizar_kernel` | 18.360 | 3,0 µs (24%) | 2,5 µs (22%) |
+| `delta_anterior_kernel` | 12.240 | 2,4 µs (12%) | 2,1 µs (12%) |
+| `saida_kernel` | 6.120 | 2,0 µs (5%) | 1,8 µs (5%) |
 
-- **São 55.080 kernels, e a GPU passa 206 ms executando-os**, de 217 ms de treino. A CPU lança mais rápido do que a GPU executa: cada kernel espera em média 4,5 ms na fila. O limite é a execução na GPU, não o lançamento.
-- **Cada kernel tem um custo fixo de ≈ 2 µs.** O `saida_kernel`, com 32 threads e 10 operações cada, leva 1,8 µs. Nove kernels por batch somam ≈ 18 µs, contra ≈ 32 µs de trabalho por batch na CPU.
+- **São 55.080 kernels, e a GPU passa quase todo o treino executando-os**: 230 de 233 ms no SD, 206 de 217 ms no Franky. A CPU lança mais rápido do que a GPU executa: cada kernel espera em média ≈ 5 ms na fila. O limite é a execução na GPU, não o lançamento.
+- **Cada kernel tem um custo fixo de ≈ 2 µs.** O `saida_kernel`, com 32 threads e 10 operações cada, leva 1,8 a 2,0 µs. Nove kernels por batch somam ≈ 18 µs, contra ≈ 32 µs de trabalho por batch na CPU do Franky e ≈ 94 µs na do SD: por isso o porte perde no Franky e ganha no SD.
 - **O forward é o kernel mais longo.** Na primeira camada, cada thread faz 64 leituras da memória global em sequência, e são só 1.024 threads.
 
-A fase 4 ataca esses três pontos: menos kernels por batch (fusão), dados reaproveitados em memória compartilhada e mais threads por produto escalar.
+A fase 4 ataca esses três pontos: menos kernels por batch (fusão), dados reaproveitados em memória compartilhada e menos lançamentos.
 
 ### 3.4 Otimização em GPU
 
-Otimizações e técnicas avançadas em GPU (memória compartilhada, *tiling*, streams), guiadas pelo Nsight Systems.
+Otimizações e técnicas avançadas em GPU (fusão de kernels, memória compartilhada), guiadas pelo Nsight Systems.
 
-| Issue | Tag | Intervenção | Tempo de treino | Speedup |
+| Issue | Tag | Intervenção | SD | Franky |
 |---|---|---|---|---|
-| [#17](https://github.com/thomaskmk/awful-barenn/issues/17) | `v4.1` | Kernels de um batch fundidos em um bloco; pesos copiados para a memória compartilhada a cada batch | 0,116 s | 3,06× |
-| [#18](https://github.com/thomaskmk/awful-barenn/issues/18) | `v4.2` | Treino inteiro em um kernel, com os pesos na memória compartilhada (bloco de 1.024 threads) | 0,1005 s | 3,52× |
+| [#17](https://github.com/thomaskmk/awful-barenn/issues/17) | `v4.1` | Kernels de um batch fundidos em um bloco; pesos copiados para a memória compartilhada a cada batch | 0,0783 s (12,53×) | 0,116 s (3,06×) |
+| [#18](https://github.com/thomaskmk/awful-barenn/issues/18) | `v4.2` | Treino inteiro em um kernel, com os pesos na memória compartilhada (bloco de 1.024 threads) | **0,0631 s (15,55×)** | **0,1005 s (3,52×)** |
 
-Tempo no Franky (mediana de 10), com o speedup sobre o código base do Franky (0,354 s). O SD estava fora do ar; os tempos dele entram quando voltar.
+Tempo de treino: mediana de 10, com o speedup sobre o código base do mesmo cluster.
 
-**Fusão em um bloco.** Os 9 kernels de um batch viram etapas de um único kernel, executado por um bloco de 1.024 threads, com uma barreira (`__syncthreads`) entre as etapas. A entrada, as ativações e os deltas do batch ficam na memória compartilhada, e os lançamentos caem de 55.080 para 6.120. Cada etapa distribui seus elementos entre as threads de `blockDim.x` em `blockDim.x`, então o tamanho do bloco é só um parâmetro. A saída é idêntica à da `v3.2` ([log](logs/fase4/franky_check_v4.1.txt)).
+**Fusão em um bloco.** Os 9 kernels de um batch viram etapas de um único kernel, executado por um bloco de 1.024 threads, com uma barreira (`__syncthreads`) entre as etapas. A entrada, as ativações e os deltas do batch ficam na memória compartilhada, e os lançamentos caem de 55.080 para 6.120. Cada etapa distribui seus elementos entre as threads de `blockDim.x` em `blockDim.x`, então o tamanho do bloco é só um parâmetro. A saída é idêntica à da `v3.2` nos dois clusters ([SD](logs/fase4/check_v4.1.txt), [Franky](logs/fase4/franky_check_v4.1.txt)).
 
-A primeira versão, com os pesos lidos da memória global, ficou **mais lenta** que a `v3.2`: 0,344 s, com 56 µs por batch ([log](logs/fase4/franky_v4.1_pesos_globais), [relatório](logs/fase4/nsys_v4.1_pesos_globais.txt)). No forward, as 32 threads de um warp calculam 32 neurônios diferentes e, a cada passo do produto escalar, leem a mesma coluna de 32 linhas da matriz de pesos, a 256 bytes uma da outra: cada leitura busca 32 linhas de cache. Na `v3.2`, essas leituras se dividiam entre vários SMs; com um bloco só, todas passam pelo L1 de um único SM.
+No Franky, a primeira versão, com os pesos lidos da memória global, ficou **mais lenta** que a `v3.2`: 0,344 s, com 56 µs por batch ([log](logs/fase4/franky_v4.1_pesos_globais), [relatório](logs/fase4/nsys_v4.1_pesos_globais.txt)). No forward, as 32 threads de um warp calculam 32 neurônios diferentes e, a cada passo do produto escalar, leem a mesma coluna de 32 linhas da matriz de pesos, a 256 bytes uma da outra: cada leitura busca 32 linhas de cache. Na `v3.2`, essas leituras se dividiam entre vários SMs; com um bloco só, todas passam pelo L1 de um único SM.
 
 A correção foi copiar os pesos para a memória compartilhada no início de cada batch, com leitura coalescida da memória global. O forward e a propagação passam a ler dessa cópia; a atualização continua escrevendo na global, também de forma coalescida. Na cópia, cada linha ocupa `in_features + 1` posições: com passo 64, as 32 leituras da mesma coluna cairiam no mesmo banco da memória compartilhada; com passo 65, caem em 32 bancos diferentes.
 
 | | `v3.2` | `v4.1`, pesos na global | `v4.1` |
 |---|---|---|---|
 | Lançamentos | 55.080 | 6.120 | 6.120 |
-| Tempo de GPU por batch | ≈ 34 µs (9 kernels) | 56 µs | 18,4 µs |
-| Tempo de treino | 0,217 s | 0,344 s | **0,116 s** |
+| Tempo de GPU por batch, SD | ≈ 38 µs (9 kernels) | — | 12,2 µs |
+| Tempo de treino, SD | 0,233 s | — | **0,0783 s** |
+| Tempo de GPU por batch, Franky | ≈ 34 µs (9 kernels) | 56 µs | 18,4 µs |
+| Tempo de treino, Franky | 0,217 s | 0,344 s | **0,116 s** |
 
-Com isso, a GPU passa a CPU pela primeira vez: 0,116 s, contra 0,124 s da `v3.1` com 4 threads ([relatório](logs/fase4/nsys_v4.1.txt)).
+Com isso, a GPU passa a CPU também no Franky (0,116 s, contra 0,124 s da `v3.1` com 4 threads); no SD, fica 3,3× mais rápida que a melhor CPU ([SD](logs/fase4/sd_nsys_v4.1.txt), [Franky](logs/fase4/nsys_v4.1.txt)).
 
-**Recursos do kernel.** Pela compilação de diagnóstico para a RTX A1000 (`--resource-usage`), o kernel usa 42 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. Como o kernel tem um único bloco, só 1 dos 18 SMs da GPU trabalha. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
+**Recursos do kernel.** Pela compilação de diagnóstico (`--resource-usage`), o kernel usa 42 registradores por thread na RTX A1000 e 32 na V100, sem *spill* ([SD](logs/fase4/sd_recursos_v4.1.txt), [Franky](logs/fase4/franky_recursos_v4.1.txt)), e ≈ 33 KB de memória compartilhada com B = 32. Como o kernel tem um único bloco, só 1 SM trabalha: 1 de 18 no Franky, 1 de 80 no SD. O trabalho de um batch é pequeno demais para dividir entre SMs, que só se sincronizam entre lançamentos.
 
-**Treino em um kernel.** O laço de épocas e de batches entra no kernel, e os pesos e os vieses ficam na memória compartilhada do começo ao fim: são lidos da memória global uma vez, no início, e gravados de volta uma vez, no fim. Entre um batch e o seguinte, uma barreira substitui o lançamento, e os 6.120 lançamentos viram 1. A saída é idêntica à da `v4.1` ([log](logs/fase4/franky_check_v4.2.txt)).
+**Treino em um kernel.** O laço de épocas e de batches entra no kernel, e os pesos e os vieses ficam na memória compartilhada do começo ao fim: são lidos da memória global uma vez, no início, e gravados de volta uma vez, no fim. Entre um batch e o seguinte, uma barreira substitui o lançamento, e os 6.120 lançamentos viram 1. A saída é idêntica à da `v4.1` nos dois clusters ([SD](logs/fase4/check_v4.2.txt), [Franky](logs/fase4/franky_check_v4.2.txt)).
 
 | | `v4.1` | `v4.2` |
 |---|---|---|
 | Lançamentos | 6.120 | 1 |
-| Tempo de GPU por batch | 18,4 µs | 16,4 µs |
-| Tempo de treino | 0,116 s | **0,1005 s** |
+| Tempo de GPU por batch, SD | 12,2 µs | 10,3 µs |
+| Tempo de treino, SD | 0,0783 s | **0,0631 s** |
+| Tempo de GPU por batch, Franky | 18,4 µs | 16,4 µs |
+| Tempo de treino, Franky | 0,116 s | **0,1005 s** |
 
-O ganho, ≈ 2 µs por batch, é o lançamento e a cópia dos pesos que cada batch fazia ([relatório](logs/fase4/nsys_v4.2.txt)). Os 16,4 µs que sobram são o cálculo do batch em um único SM: ≈ 200 mil multiplicações-somas em 8 etapas separadas por barreiras, com cada thread fazendo suas somas em sequência.
+O ganho, ≈ 2 µs por batch nos dois clusters, é o lançamento e a cópia dos pesos que cada batch fazia ([SD](logs/fase4/sd_nsys_v4.2.txt), [Franky](logs/fase4/nsys_v4.2.txt)). O tempo que sobra é o cálculo do batch em um único SM: ≈ 200 mil multiplicações-somas em 8 etapas separadas por barreiras, com cada thread fazendo suas somas em sequência.
 
-**Tamanho do bloco** (variável `BLOCO`, [log](logs/fase4/franky_v4.2)):
+**Tamanho do bloco** (variável `BLOCO`, [SD](logs/fase4/sd_v4.2), [Franky](logs/fase4/franky_v4.2)):
 
 | Threads por bloco | 256 | 512 | 1.024 |
 |---|---|---|---|
-| Tempo de treino | 0,107 s | 0,101 s | **0,1005 s** |
+| SD | 0,0764 s | 0,0646 s | **0,0631 s** |
+| Franky | 0,107 s | 0,101 s | **0,1005 s** |
 
-Com menos threads, cada uma processa mais elementos em sequência em cada etapa, e sobram menos warps para o SM alternar enquanto outros esperam uma leitura. As barreiras ficam mais baratas, mas não compensam. O padrão é 1.024 threads. O kernel usa 56 registradores por thread, sem *spill* ([log](logs/fase4/franky_recursos_v4.2.txt)), e ≈ 34 KB de memória compartilhada com B = 32; o limite de batch continua em 52.
+Com menos threads, cada uma processa mais elementos em sequência em cada etapa, e sobram menos warps para o SM alternar enquanto outros esperam uma leitura. As barreiras ficam mais baratas, mas não compensam. O padrão é 1.024 threads. O kernel usa 56 registradores por thread na RTX A1000, sem *spill*, e 32 na V100, com um *spill* de 20 bytes ([SD](logs/fase4/sd_recursos_v4.2.txt), [Franky](logs/fase4/franky_recursos_v4.2.txt)); a memória compartilhada é ≈ 34 KB com B = 32, e o limite de batch continua em 52.
 
 ---
 
@@ -296,8 +311,8 @@ Tempo de treino: mediana de 10 execuções. Speedup em relação ao código base
 | Código base | `v0-baseline` | 0,981 s | 1,0× | 95,5% |
 | CPU otimizada (sequencial) | `v1.4` | 0,571 s | 1,72× | 95,5% |
 | CPU paralela (mini-batch) | `v2.2` | 0,275 s | 3,57× | 96,7% |
-| CUDA inicial | _—_ | | | |
-| CUDA otimizada | _—_ | | | |
+| CUDA inicial | `v3.2` | 0,233 s | 4,21× | 96,7% |
+| CUDA otimizada | `v4.2` | 0,0631 s | 15,55× | 96,7% |
 
 ### Franky
 
