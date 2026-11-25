@@ -1,0 +1,107 @@
+Wed Nov 25 18:05:53 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.124.06             Driver Version: 570.124.06     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA RTX A1000               Off |   00000000:01:00.0 Off |                  N/A |
+| 32%   58C    P0            N/A  /   50W |       1MiB /   8188MiB |      2%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+TREINO | 3823 imagens
+Epoca  1/51 | perda media 0.4491
+Epoca  6/51 | perda media 0.0791
+Epoca 11/51 | perda media 0.0426
+Epoca 16/51 | perda media 0.0329
+Epoca 21/51 | perda media 0.0278
+Epoca 26/51 | perda media 0.0243
+Epoca 31/51 | perda media 0.0220
+Epoca 36/51 | perda media 0.0202
+Epoca 41/51 | perda media 0.0185
+Epoca 46/51 | perda media 0.0173
+Epoca 51/51 | perda media 0.0163
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 1.780 ms, volta 0.171 ms
+
+AVALIACAO FINAL
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0390
+
+ALGUMAS INFERENCIAS
+Esperado  Previsto
+       0         0
+       1         1
+       2         8
+       3         3
+       5         9
+       7         8
+
+CONFUSOES MAIS FREQUENTES
+Esperado  Previsto  Ocorrencias
+       7         5           11
+       7         8            5
+       2         8            4
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.182 ms, volta 0.167 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.183 ms, volta 0.169 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.185 ms, volta 0.168 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.185 ms, volta 0.169 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.186 ms, volta 0.155 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.184 ms, volta 0.172 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.178 ms, volta 0.171 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.181 ms, volta 0.171 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.175 ms, volta 0.175 ms
+Tempo de treino 0.1005 s
+Tempo de copias (fora do treino): ida 0.176 ms, volta 0.170 ms
+== Tamanho do bloco (#18)
+-- BLOCO=256
+Tempo de treino 0.1065 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1154 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1154 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1065 s
+Tempo de treino 0.1065 s
+-- BLOCO=512
+Tempo de treino 0.1012 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1012 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+Tempo de treino 0.1011 s
+-- BLOCO=1024
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s
+Tempo de treino 0.1005 s

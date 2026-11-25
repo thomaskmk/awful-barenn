@@ -22,3 +22,11 @@ nvidia-smi
 for i in {1..10}; do
     ./barenn_gpu | grep Tempo
 done
+
+echo "== Tamanho do bloco (#18)"
+for T in 256 512 1024; do
+    echo "-- BLOCO=$T"
+    for i in {1..10}; do
+        BLOCO=$T ./barenn_gpu | grep "Tempo de treino"
+    done
+done
