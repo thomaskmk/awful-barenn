@@ -1,0 +1,4 @@
+# nvcc -O3 -arch=native --resource-usage (compilação de diagnóstico)
+ptxas info    : Compiling entry function '_ZN6Barenn20treinar_batch_kernelEPKfPKiPfS4_S4_S4_S4_S4_S4_iff' for 'sm_70'
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 32 registers, used 1 barriers, 436 bytes cmem[0]

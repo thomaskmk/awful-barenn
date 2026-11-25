@@ -1,0 +1,39 @@
+Generating SQLite file logs/fase4/sd_nsys_v4.1.sqlite from logs/fase4/sd_nsys_v4.1.nsys-rep
+Processing [logs/fase4/sd_nsys_v4.1.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_api_sum.py]... 
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls    Avg (ns)      Med (ns)     Min (ns)    Max (ns)    StdDev (ns)            Name         
+ --------  ---------------  ---------  ------------  ------------  ----------  -----------  ------------  ----------------------
+     56.8      103,949,825          9  11,549,980.6       2,940.0       2,278  103,919,232  34,638,469.3  cudaMalloc            
+     35.3       64,669,852      6,120      10,567.0      12,568.5       3,196       40,966       4,041.4  cudaLaunchKernel      
+      7.3       13,338,516          1  13,338,516.0  13,338,516.0  13,338,516   13,338,516           0.0  cudaDeviceSynchronize 
+      0.4          773,118         15      51,541.2      13,639.0       8,704      248,667      77,917.7  cudaMemcpy            
+      0.1          273,306          9      30,367.3       3,577.0       2,782      235,505      76,966.4  cudaFree              
+      0.0            1,595          1       1,595.0       1,595.0       1,595        1,595           0.0  cuModuleGetLoadingMode
+
+Processing [logs/fase4/sd_nsys_v4.1.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+
+ Time (%)  Total Time (ns)  Instances  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)                                                  Name                                                
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  ----------------------------------------------------------------------------------------------------
+    100.0       74,860,557      6,120  12,232.1  12,256.0     8,095    13,152        397.6  Barenn::treinar_batch_kernel(const float *, const int *, float *, float *, float *, float *, float …
+
+Processing [logs/fase4/sd_nsys_v4.1.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+
+ Time (%)  Total Time (ns)  Count  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  --------  --------  --------  --------  -----------  ----------------------------
+     57.0           93,887      8  11,735.9   1,360.0     1,248    82,687     28,673.1  [CUDA memcpy Host-to-Device]
+     43.0           70,914      7  10,130.6   1,920.0     1,504    60,032     22,006.8  [CUDA memcpy Device-to-Host]
+
+Processing [logs/fase4/sd_nsys_v4.1.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_kern_exec_sum.py]... 
+
+ ** CUDA Kernel Launch & Exec Time Summary (cuda_kern_exec_sum):
+
+    PID        TID     DevId  Count  QCount   TAvg (ns)     TMed (ns)    TMin (ns)  TMax (ns)   TStdDev (ns)  AAvg (ns)  AMed (ns)  AMin (ns)  AMax (ns)  AStdDev (ns)   QAvg (ns)     QMed (ns)    QMin (ns)  QMax (ns)   QStdDev (ns)  KAvg (ns)  KMed (ns)  KMin (ns)  KMax (ns)  KStdDev (ns)      API Name                                                  Kernel Name                                             
+ ---------  ---------  -----  -----  ------  ------------  ------------  ---------  ----------  ------------  ---------  ---------  ---------  ---------  ------------  ------------  ------------  ---------  ----------  ------------  ---------  ---------  ---------  ---------  ------------  ----------------  ----------------------------------------------------------------------------------------------------
+ 2,182,517  2,182,517      0  6,120   6,119  11,770,200.2  13,346,017.0     24,525  13,356,900   3,399,162.2   10,567.0   12,568.5      3,196     40,966       4,041.4  11,749,321.2  13,321,073.0      5,559  13,331,997   3,392,893.8   12,232.1   12,256.0      8,095     13,152         397.6  cudaLaunchKernel  Barenn::treinar_batch_kernel(const float *, const int *, float *, float *, float *, float *, float …
+

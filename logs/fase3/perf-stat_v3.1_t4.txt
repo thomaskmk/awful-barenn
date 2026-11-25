@@ -1,0 +1,17 @@
+# started on Wed Nov 25 20:41:50 2026
+
+
+ Performance counter stats for 'bin/sd_v3.1_prof':
+
+     3,776,893,358      cycles                                                      
+     5,461,604,625      instructions              #    1.45  insn per cycle         
+     1,076,655,724      L1-dcache-loads                                             
+        31,539,413      L1-dcache-load-misses     #    2.93% of all L1-dcache accesses
+            16,073      cache-misses                                                
+
+       0.309406647 seconds time elapsed
+
+       1.092766000 seconds user
+       0.003995000 seconds sys
+
+

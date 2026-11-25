@@ -1,0 +1,108 @@
+Wed Nov 25 20:32:07 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 560.35.03              Driver Version: 560.35.03      CUDA Version: 12.6     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-SXM2-32GB           On  |   00000000:61:00.0 Off |                    0 |
+| N/A   49C    P0             45W /  300W |       1MiB /  32768MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Build cuda_12.6.r12.6/compiler.34841621_0
+TREINO | 3823 imagens
+Epoca  1/51 | perda media 0.4491
+Epoca  6/51 | perda media 0.0791
+Epoca 11/51 | perda media 0.0426
+Epoca 16/51 | perda media 0.0329
+Epoca 21/51 | perda media 0.0278
+Epoca 26/51 | perda media 0.0243
+Epoca 31/51 | perda media 0.0220
+Epoca 36/51 | perda media 0.0202
+Epoca 41/51 | perda media 0.0185
+Epoca 46/51 | perda media 0.0173
+Epoca 51/51 | perda media 0.0163
+Tempo de treino 0.0748 s
+Tempo de copias (fora do treino): ida 0.396 ms, volta 0.358 ms
+
+AVALIACAO FINAL
+Acuracia 96.7% | 1737 acertos em 1797 imagens
+Perda media 0.0390
+
+ALGUMAS INFERENCIAS
+Esperado  Previsto
+       0         0
+       1         1
+       2         8
+       3         3
+       5         9
+       7         8
+
+CONFUSOES MAIS FREQUENTES
+Esperado  Previsto  Ocorrencias
+       7         5           11
+       7         8            5
+       2         8            4
+Tempo de treino 0.0663 s
+Tempo de copias (fora do treino): ida 0.379 ms, volta 0.343 ms
+Tempo de treino 0.0663 s
+Tempo de copias (fora do treino): ida 0.383 ms, volta 0.709 ms
+Tempo de treino 0.0663 s
+Tempo de copias (fora do treino): ida 0.383 ms, volta 0.340 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.388 ms, volta 0.348 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.377 ms, volta 0.333 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.386 ms, volta 0.338 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.385 ms, volta 0.331 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.389 ms, volta 0.323 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.382 ms, volta 0.335 ms
+Tempo de treino 0.0631 s
+Tempo de copias (fora do treino): ida 0.378 ms, volta 0.338 ms
+== Tamanho do bloco (#18)
+-- BLOCO=256
+Tempo de treino 0.0765 s
+Tempo de treino 0.0765 s
+Tempo de treino 0.0764 s
+Tempo de treino 0.0764 s
+Tempo de treino 0.0765 s
+Tempo de treino 0.0764 s
+Tempo de treino 0.0765 s
+Tempo de treino 0.0764 s
+Tempo de treino 0.0764 s
+Tempo de treino 0.0764 s
+-- BLOCO=512
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+Tempo de treino 0.0646 s
+-- BLOCO=1024
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s
+Tempo de treino 0.0631 s

@@ -1,0 +1,16 @@
+== B=1, 1 thread, contra o código base
+Referência: /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_base
+Candidato:  /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v3.1
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 1 threads, contra a v2.2
+Referência: /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v2.2
+Candidato:  /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v3.1
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 4 threads, contra a v2.2
+Referência: /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v2.2
+Candidato:  /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v3.1
+OK: saída idêntica à referência (exceto o tempo).
+== B=32, taxa=0.32, 16 threads, contra a v2.2
+Referência: /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v2.2
+Candidato:  /scratch/insperhpc/thomas.kassabian/aps2/bin/sd_v3.1
+OK: saída idêntica à referência (exceto o tempo).

@@ -1,0 +1,39 @@
+Generating SQLite file logs/fase4/sd_nsys_v4.2.sqlite from logs/fase4/sd_nsys_v4.2.nsys-rep
+Processing [logs/fase4/sd_nsys_v4.2.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_api_sum.py]... 
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls    Avg (ns)      Med (ns)     Min (ns)    Max (ns)   StdDev (ns)            Name         
+ --------  ---------------  ---------  ------------  ------------  ----------  ----------  ------------  ----------------------
+     60.3       97,696,790          9  10,855,198.9       3,241.0       2,432  97,665,544  32,553,879.5  cudaMalloc            
+     38.9       63,083,382          1  63,083,382.0  63,083,382.0  63,083,382  63,083,382           0.0  cudaDeviceSynchronize 
+      0.5          884,884         15      58,992.3      14,570.0       9,688     342,884      97,052.4  cudaMemcpy            
+      0.2          343,176          9      38,130.7       4,940.0       3,734     293,875      95,956.2  cudaFree              
+      0.0           68,265          1      68,265.0      68,265.0      68,265      68,265           0.0  cudaLaunchKernel      
+      0.0            1,184          1       1,184.0       1,184.0       1,184       1,184           0.0  cuModuleGetLoadingMode
+
+Processing [logs/fase4/sd_nsys_v4.2.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+
+ Time (%)  Total Time (ns)  Instances    Avg (ns)      Med (ns)     Min (ns)    Max (ns)   StdDev (ns)                                                  Name                                                
+ --------  ---------------  ---------  ------------  ------------  ----------  ----------  -----------  ----------------------------------------------------------------------------------------------------
+    100.0       63,079,876          1  63,079,876.0  63,079,876.0  63,079,876  63,079,876          0.0  Barenn::treinar_kernel(const float *, const int *, float *, float *, float *, float *, float *, flo…
+
+Processing [logs/fase4/sd_nsys_v4.2.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+
+ Time (%)  Total Time (ns)  Count  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  --------  --------  --------  --------  -----------  ----------------------------
+     58.8          101,251      8  12,656.4   1,376.5     1,217    90,016     31,262.3  [CUDA memcpy Host-to-Device]
+     41.2           70,976      7  10,139.4   1,920.0     1,504    60,032     22,002.8  [CUDA memcpy Device-to-Host]
+
+Processing [logs/fase4/sd_nsys_v4.2.sqlite] with [/opt/nvidia/nsight-systems/2024.5.1/host-linux-x64/reports/cuda_kern_exec_sum.py]... 
+
+ ** CUDA Kernel Launch & Exec Time Summary (cuda_kern_exec_sum):
+
+    PID        TID     DevId  Count  QCount   TAvg (ns)     TMed (ns)    TMin (ns)   TMax (ns)   TStdDev (ns)  AAvg (ns)  AMed (ns)  AMin (ns)  AMax (ns)  AStdDev (ns)  QAvg (ns)  QMed (ns)  QMin (ns)  QMax (ns)  QStdDev (ns)   KAvg (ns)     KMed (ns)    KMin (ns)   KMax (ns)   KStdDev (ns)      API Name                                                  Kernel Name                                             
+ ---------  ---------  -----  -----  ------  ------------  ------------  ----------  ----------  ------------  ---------  ---------  ---------  ---------  ------------  ---------  ---------  ---------  ---------  ------------  ------------  ------------  ----------  ----------  ------------  ----------------  ----------------------------------------------------------------------------------------------------
+ 2,182,683  2,182,683      0      1       0  63,142,278.0  63,142,278.0  63,142,278  63,142,278           0.0   68,265.0   68,265.0     68,265     68,265           0.0                                                       0.0  63,079,876.0  63,079,876.0  63,079,876  63,079,876           0.0  cudaLaunchKernel  Barenn::treinar_kernel(const float *, const int *, float *, float *, float *, float *, float *, flo…
+
