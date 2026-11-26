@@ -53,7 +53,7 @@ O `barenn.cpp` é uma rede neural *feedforward* escrita do zero, sem bibliotecas
 | Arquitetura | 64 → 32 → 16 → 10, ReLU nas camadas ocultas, saída linear |
 | Parâmetros | 2.778 (2.720 pesos + 58 vieses), cerca de 11 KB em `float` |
 | Perda | Metade do erro quadrático, com alvo *one-hot* |
-| Treino | SGD por amostra, 51 épocas, taxa 0,02, ordem do arquivo |
+| Treino | No código base, SGD por amostra, 51 épocas, taxa 0,02, ordem do arquivo. A partir da fase 2, mini-batch com B = 32 e taxa 0,32 ([seção 3.2](#32-paralelismo-em-cpu)) |
 | Dados | 3.823 imagens de treino (`optdigits.tra`) e 1.797 de teste (`optdigits.tes`) |
 | Métrica de desempenho | `Tempo de treino`: o cronômetro cobre só o laço de treino, sem leitura nem avaliação |
 
@@ -122,7 +122,15 @@ sbatch slurm/franky_fase<X>.slurm
 
 Há um slurm por ambiente e por fase. A `v3.1`, que é de CPU, é medida com o slurm da fase 2. Nas tags `v0-baseline` a `v1.3`, os de CPU se chamam `sd_cpu.slurm` e `franky_cpu.slurm`. Os slurms do Franky foram corrigidos depois da `v2.2`: nas tags anteriores eles ainda compilam dentro do job, o que falha no cluster. Para medir uma tag antiga no Franky, compile o código da tag e submeta o slurm do `master`.
 
-O programa lê três variáveis de ambiente: `BATCH_SIZE` (padrão 1, o SGD por amostra do código base), `TAXA` (padrão 0,02) e, na versão em GPU a partir da `v4.2`, `BLOCO` (threads do bloco, padrão 1.024). Os slurms das fases 3 e 4 já usam B = 32 e taxa = 0,32. Cada job mede o tempo de treino em 10 execuções. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …), com o prefixo do cluster (`sd_`, `franky_`).
+O programa lê três variáveis de ambiente: `BATCH_SIZE` (padrão 1, o SGD por amostra do código base), `TAXA` (padrão 0,02) e, na versão em GPU a partir da `v4.2`, `BLOCO` (threads do bloco, padrão 1.024). Os slurms das fases 3 e 4 já usam B = 32 e taxa = 0,32. Os logs ficam em `logs/`, separados por fase (`base/`, `fase1/`, …), com o prefixo do cluster (`sd_`, `franky_`).
+
+### 1.6 Metodologia de medição
+
+- **Tempo.** Cada job roda o programa uma vez por completo, o que registra a saída e serve de aquecimento, e depois mais 10 vezes, guardando só o `Tempo de treino`. A métrica é a mediana dessas 10, menos sensível a uma execução isolada mais lenta; os 10 valores estão nos logs.
+- **Isolamento.** Os jobs de CPU reservam todos os núcleos do nó (48 no SD, 16 no Franky). Com OpenMP, as threads ficam presas a núcleos físicos (`OMP_PROC_BIND=close`, `OMP_PLACES=cores`).
+- **Profiling separado.** callgrind, perf e Nsight Systems alteram o tempo de execução, então rodam em execuções próprias, com os mesmos parâmetros, e nunca entram na mediana.
+- **Comparações apertadas.** Quando a diferença esperada é pequena, as duas versões rodam no mesmo nó, alternadas, para que variações do nó afetem as duas por igual.
+- **GPU.** O cronômetro cobre só o treino. As cópias entre CPU e GPU e o carregamento dos kernels ficam fora dele, e um `cudaDeviceSynchronize` garante que a GPU terminou antes de parar o relógio. As cópias são medidas à parte e impressas em uma linha própria.
 
 ---
 
@@ -146,11 +154,11 @@ Pelo callgrind:
 
 | Trecho | Linhas | % das instruções (total 9,40 × 10⁹) |
 |---|---|---|
-| **Backward: `grad_in`** | [77-82](barenn.cpp#L77-L82) | **47,0%** |
-| Forward: matriz × vetor | [54-61](barenn.cpp#L54-L61) | 23,0% |
-| Backward: atualização dos pesos | [87-91](barenn.cpp#L87-L91) | 14,7% |
+| **Backward: `grad_in`** | [77-82](https://github.com/thomaskmk/awful-barenn/blob/v0-baseline/barenn.cpp#L77-L82) | **47,0%** |
+| Forward: matriz × vetor | [54-61](https://github.com/thomaskmk/awful-barenn/blob/v0-baseline/barenn.cpp#L54-L61) | 23,0% |
+| Backward: atualização dos pesos | [87-91](https://github.com/thomaskmk/awful-barenn/blob/v0-baseline/barenn.cpp#L87-L91) | 14,7% |
 | Alocação e cópia (`malloc`, `free`, `new`, `memcpy`, `memset`) | — | ≈ 5% |
-| `ler_dados` (fora do cronômetro) | [102-140](barenn.cpp#L102-L140) | 4,4% |
+| `ler_dados` (fora do cronômetro) | [102-140](https://github.com/thomaskmk/awful-barenn/blob/v0-baseline/barenn.cpp#L102-L140) | 4,4% |
 | Perda e avaliação | — | < 1% |
 
 ### 2.3 Contadores de hardware (perf stat)
@@ -184,7 +192,7 @@ O baseline está na região limitada por cálculo e atinge cerca de 3,2 GFLOP/s 
 | # | Gargalo | Evidência | Fase |
 |---|---|---|---|
 | G1 | O `grad_in` percorre `weights[j][i]` por coluna. Cada iteração carrega o ponteiro de uma linha diferente e o laço não vetoriza | 47% das instruções, contra 14,7% da atualização dos pesos, que tem o mesmo número de multiplicações mas percorre a linha e vetoriza (`-fopt-info-vec`) | 1 |
-| G2 | O `grad_in` da primeira camada é calculado e descartado ([linha 289](barenn.cpp#L289)) | 2.048 das 2.720 multiplicações-somas do `grad_in`: cerca de 35% de todas as instruções, estimado pela proporção | 1 |
+| G2 | O `grad_in` da primeira camada é calculado e descartado ([linha 289](https://github.com/thomaskmk/awful-barenn/blob/v0-baseline/barenn.cpp#L289)) | 2.048 das 2.720 multiplicações-somas do `grad_in`: cerca de 35% de todas as instruções, estimado pela proporção | 1 |
 | G3 | Vetores passados e devolvidos por valor, recriados a cada chamada | 2,95 × 10⁶ chamadas a `malloc` (≈ 15 por amostra), ≈ 5% das instruções | 1 |
 
 **Limite ao paralelismo.** O SGD por amostra é sequencial: cada amostra usa os pesos atualizados pela anterior, e cada uma tem cerca de 5 µs de trabalho (0,981 s ÷ 194.973 passos de treino), pouco demais para dividir entre threads. Paralelizar exige mudar o algoritmo para mini-batch (seção 3.2).
@@ -245,7 +253,7 @@ Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
 | [#13](https://github.com/thomaskmk/awful-barenn/issues/13) | `v3.1` | Dados, pesos e `grad_w` em vetores contíguos (CPU, 4 threads) | 0,260 s (3,77×) | 0,124 s (2,85×) |
 | [#14](https://github.com/thomaskmk/awful-barenn/issues/14) | `v3.2` | Porte para CUDA: 9 kernels por batch, uma thread por elemento de saída | 0,233 s (4,21×) | 0,217 s (1,63×) |
 
-**Vetores contíguos.** Para ir para a GPU de uma vez, os dados e os pesos passam para blocos contínuos. A saída é idêntica à da `v2.2`, e o tempo cai com qualquer número de threads, mais quanto mais threads (no SD, com 32 threads, de 17,4 para 4,2 s). A hipótese da issue, menos instruções no `Atualizar`, foi refutada pelo callgrind: o total de instruções cai só 0,3%. O que cai são as falhas no L1 (−88% com 1 thread, pelo perf stat): na `v2.2`, cada imagem e cada linha das matrizes era um bloco alocado à parte; contínuos, os mesmos dados ocupam menos linhas de cache e são percorridos em sequência.
+**Vetores contíguos.** Para ir para a GPU de uma vez, os dados e os pesos passam para blocos contínuos. A saída é idêntica à da `v2.2`, e o tempo cai com qualquer número de threads. A queda cresce com o número de threads: no SD, é de 5% com 4 threads e, com 32, o tempo vai de 17,4 para 4,2 s. A hipótese da issue, menos instruções no `Atualizar`, foi refutada pelo callgrind: o total de instruções cai só 0,3%. O que cai são as falhas no L1 (−88% com 1 thread, pelo perf stat): na `v2.2`, cada imagem e cada linha das matrizes era um bloco alocado à parte; contínuos, os mesmos dados ocupam menos linhas de cache e são percorridos em sequência.
 
 **Porte para CUDA.** O treino roda em [barenn.cu](barenn.cu); o `barenn.cpp` continua como a versão de CPU. Os dados e os pesos vão para a GPU uma vez e voltam uma vez, com as cópias fora do cronômetro; leitura, inicialização dos pesos e avaliação ficam na CPU. A saída fica dentro da tolerância contra a `v2.1`. O Nsight Systems mostra o mesmo perfil nos dois clusters: 55.080 kernels, com a GPU executando kernels em quase todo o treino, e um custo fixo de ≈ 2 µs por kernel. O `saida_kernel`, com 32 threads e 10 operações cada, já leva 1,8 a 2,0 µs, e os 9 kernels de um batch somam ≈ 18 µs só disso. Por isso o porte perde para a CPU no Franky e ganha no SD ([seção 4](#4-conclusões)).
 
