@@ -253,7 +253,7 @@ Duas issues, para separar o efeito do algoritmo do efeito do paralelismo:
 | [#13](https://github.com/thomaskmk/awful-barenn/issues/13) | `v3.1` | Dados, pesos e `grad_w` em vetores contíguos (CPU, 4 threads) | 0,260 s (3,77×) | 0,124 s (2,85×) |
 | [#14](https://github.com/thomaskmk/awful-barenn/issues/14) | `v3.2` | Porte para CUDA: 9 kernels por batch, uma thread por elemento de saída | 0,233 s (4,21×) | 0,217 s (1,63×) |
 
-**Vetores contíguos.** Para ir para a GPU de uma vez, os dados e os pesos passam para blocos contínuos. A saída é idêntica à da `v2.2`, e o tempo cai com qualquer número de threads. A queda cresce com o número de threads: no SD, é de 5% com 4 threads e, com 32, o tempo vai de 17,4 para 4,2 s. A hipótese da issue, menos instruções no `Atualizar`, foi refutada pelo callgrind: o total de instruções cai só 0,3%. O que cai são as falhas no L1 (−88% com 1 thread, pelo perf stat): na `v2.2`, cada imagem e cada linha das matrizes era um bloco alocado à parte; contínuos, os mesmos dados ocupam menos linhas de cache e são percorridos em sequência.
+**Vetores contíguos.** Os dados e os pesos passam para blocos contínuos, o que melhora o acesso à memória e permite copiá-los de uma vez para a GPU. A saída é idêntica à da `v2.2`, e o tempo cai com qualquer número de threads. A queda cresce com o número de threads: no SD, é de 5% com 4 threads e, com 32, o tempo vai de 17,4 para 4,2 s. Os contadores confirmam que o ganho vem do acesso à memória: o callgrind mostra praticamente o mesmo número de instruções (−0,3%), e o perf stat mostra as falhas no L1 caindo 88% com 1 thread. Na `v2.2`, cada imagem e cada linha das matrizes era um bloco alocado à parte; contínuos, os mesmos dados ocupam menos linhas de cache e são percorridos em sequência.
 
 **Porte para CUDA.** O treino roda em [barenn.cu](barenn.cu); o `barenn.cpp` continua como a versão de CPU. Os dados e os pesos vão para a GPU uma vez e voltam uma vez, com as cópias fora do cronômetro; leitura, inicialização dos pesos e avaliação ficam na CPU. A saída fica dentro da tolerância contra a `v2.1`. O Nsight Systems mostra o mesmo perfil nos dois clusters: 55.080 kernels, com a GPU executando kernels em quase todo o treino, e um custo fixo de ≈ 2 µs por kernel. O `saida_kernel`, com 32 threads e 10 operações cada, já leva 1,8 a 2,0 µs, e os 9 kernels de um batch somam ≈ 18 µs só disso. Por isso o porte perde para a CPU no Franky e ganha no SD ([seção 4](#4-conclusões)).
 
@@ -289,8 +289,7 @@ Contra a GPU inteira, o resultado parece baixo; contra o único SM que o desenho
 
 **O limite que sobra (Lei de Amdahl).** Cada batch depende dos pesos atualizados pelo anterior, então os 6.120 batches são uma cadeia sequencial. O paralelismo disponível está dentro de um batch, ≈ 200 mil multiplicações-somas, e cabe em um SM. Usar mais SMs exigiria sincronizá-los a cada etapa, que é a mesma troca que limitou o OpenMP a 4 threads na fase 2. Ir além exigiria batches maiores, o que muda a convergência: B = 32 foi fixado na fase 2 justamente pela acurácia.
 
-**O que os dados contrariaram.** Quatro hipóteses não se confirmaram como previstas, e a correção de cada uma veio do profiling:
+**O que os dados contrariaram.** Três hipóteses não se confirmaram como previstas, e a correção de cada uma veio do profiling:
 - `omp simd` no forward (fase 2): o compilador vetorizou, mas com mais instruções; o forward ficou mais lento.
-- Vetores contíguos (`v3.1`): o ganho não veio de menos instruções, e sim de menos falhas no L1.
 - Porte (`v3.2`): no Franky, mais lento que a CPU, pelo custo fixo de 55 mil kernels.
 - Fusão (`v4.1`): com os pesos na memória global, mais lenta que os 9 kernels; só compensou com os pesos na memória compartilhada.
